@@ -1,0 +1,13 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: SNS topic for Grafana alerts
+
+Resources:
+  GrafanaAlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: grafana-alerts
+
+Outputs:
+  TopicArn:
+    Description: SNS Topic ARN
+    Value: !Ref GrafanaAlertsTopic
