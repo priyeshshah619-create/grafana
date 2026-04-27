@@ -4,9 +4,8 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'cfn/sns.yaml'
-
+  workflow_dispatch:
+  
 jobs:
   deploy:
     runs-on: ubuntu-latest
