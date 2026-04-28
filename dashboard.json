@@ -1,113 +1,80 @@
 {
-  "annotations": {
-    "list": [
+  "dashboard": {
+    "id": null,
+    "title": "AWS Infrastructure Health",
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "uid": "aws-health-dashboard",
+    "version": 1,
+    "panels": [
       {
-        "builtIn": 1,
-        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
-        "enable": true,
-        "hide": true,
-        "iconColor": "rgba(0, 211, 255, 1)",
-        "name": "Annotations & Alerts",
-        "type": "dashboard"
+        "id": 1,
+        "type": "timeseries",
+        "title": "SNS Messages Published",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+        "datasource": { "type": "cloudwatch", "uid": "afkhffj6j0n40c" },
+        "targets": [
+          {
+            "datasource": { "type": "cloudwatch", "uid": "afkhffj6j0n40c" },
+            "namespace": "AWS/SNS",
+            "metricName": "NumberOfMessagesPublished",
+            "region": "us-east-1",
+            "statistic": "Sum",
+            "period": "300",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "type": "timeseries",
+        "title": "SNS Messages Failed",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+        "datasource": { "type": "cloudwatch", "uid": "afkhffj6j0n40c" },
+        "targets": [
+          {
+            "datasource": { "type": "cloudwatch", "uid": "afkhffj6j0n40c" },
+            "namespace": "AWS/SNS",
+            "metricName": "NumberOfMessagesFailed",
+            "region": "us-east-1",
+            "statistic": "Sum",
+            "period": "300",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "type": "gauge",
+        "title": "Total SNS Success Rate",
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+        "datasource": { "type": "cloudwatch", "uid": "afkhffj6j0n40c" },
+        "targets": [
+          {
+            "datasource": { "type": "cloudwatch", "uid": "afkhffj6j0n40c" },
+            "namespace": "AWS/SNS",
+            "metricName": "NumberOfNotificationsFailed",
+            "region": "us-east-1",
+            "statistic": "Sum",
+            "period": "300",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "red", "value": 1 }
+              ]
+            }
+          }
+        }
       }
     ]
   },
-  "description": "Logs & Errors Overview",
-  "editable": true,
-  "schemaVersion": 42,
-  "title": "Logs & Errors Overview",
-  "uid": "logs-errors-overview",
-  "version": 1,
-  "time": { "from": "now-15m", "to": "now" },
-  "timezone": "browser",
-  "panels": [
-    {
-      "id": 1,
-      "type": "timeseries",
-      "title": "Error Count — /app/order-service (5m bins)",
-      "datasource": { "type": "cloudwatch", "uid": "${DS_CLOUDWATCH}" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-      "targets": [
-        {
-          "refId": "A",
-          "queryMode": "Logs",
-          "queryLanguage": "CWLI",
-          "region": "default",
-          "logGroups": [
-            {
-              "name": "/app/order-service",
-              "arn": "arn:aws:logs:us-east-1:882352060841:log-group:/app/order-service:*",
-              "accountId": "882352060841"
-            }
-          ],
-          "expression": "fields @timestamp, @message\n| filter @message like /ERROR|error/\n| stats count() as errorCount by bin(5m)"
-        }
-      ]
-    },
-    {
-      "id": 2,
-      "type": "timeseries",
-      "title": "Info Count — /app/order-service (5m bins)",
-      "datasource": { "type": "cloudwatch", "uid": "${DS_CLOUDWATCH}" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-      "targets": [
-        {
-          "refId": "A",
-          "queryMode": "Logs",
-          "queryLanguage": "CWLI",
-          "region": "default",
-          "logGroups": [
-            {
-              "name": "/app/order-service",
-              "arn": "arn:aws:logs:us-east-1:882352060841:log-group:/app/order-service:*",
-              "accountId": "882352060841"
-            }
-          ],
-          "expression": "fields @timestamp, @message\n| filter @message like /INFO|info/\n| stats count() as infoCount by bin(5m)"
-        }
-      ]
-    },
-    {
-      "id": 3,
-      "type": "timeseries",
-      "title": "All Log Events — /app/order-service",
-      "datasource": { "type": "cloudwatch", "uid": "${DS_CLOUDWATCH}" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
-      "targets": [
-        {
-          "refId": "A",
-          "queryMode": "Logs",
-          "queryLanguage": "CWLI",
-          "region": "default",
-          "logGroups": [
-            {
-              "name": "/app/order-service",
-              "arn": "arn:aws:logs:us-east-1:882352060841:log-group:/app/order-service:*",
-              "accountId": "882352060841"
-            }
-          ],
-          "expression": "fields @timestamp\n| stats count() as totalLogs by bin(5m)"
-        }
-      ]
-    },
-    {
-      "id": 4,
-      "type": "timeseries",
-      "title": "Log Ingestion Rate — AWS/Logs IncomingLogEvents",
-      "datasource": { "type": "cloudwatch", "uid": "${DS_CLOUDWATCH}" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
-      "targets": [
-        {
-          "refId": "A",
-          "queryMode": "Metrics",
-          "region": "default",
-          "namespace": "AWS/Logs",
-          "metricName": "IncomingLogEvents",
-          "dimensions": { "LogGroupName": "/app/order-service" },
-          "statistic": "Sum",
-          "period": "300"
-        }
-      ]
-    }
-  ]
+  "overwrite": true
 }
