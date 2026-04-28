@@ -25,3 +25,11 @@ jobs:
             --template-file cfn/grafana-workspace.yaml \
             --stack-name grafana-workspace-stack \
             --capabilities CAPABILITY_NAMED_IAM
+
+      - name: Push Grafana Dashboard
+        run: |
+          curl -X POST \
+          -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          -d @dashboard.json \
+          https://g-a07f04a423.grafana-workspace.us-east-1.amazonaws.com/api/dashboards/db
