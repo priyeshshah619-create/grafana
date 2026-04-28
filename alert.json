@@ -1,81 +1,51 @@
-{
-  "apiVersion": 1,
-  "groups": [
-    {
-      "orgId": 1,
-      "name": "order-service-alerts",
-      "folder": "Order Service Alerts",
-      "interval": "1m",
-      "rules": [
-        {
-          "uid": "order-service-error-rate",
-          "title": "Order Service - Error Rate Breach",
-          "condition": "C",
-          "data": [
-            {
-              "refId": "A",
-              "relativeTimeRange": {
-                "from": 300,
-                "to": 0
-              },
-              "datasourceUid": "ffkcyaybrfxtsf",
-              "model": {
-                "expression": "filter @message like /ERROR/ | stats count() as errorCount by bin(1m)",
-                "intervalMs": 1000,
-                "maxDataPoints": 43200,
-                "logGroups": [
-                  {
-                    "accountId": "882352060841",
-                    "arn": "arn:aws:logs:us-east-1:882352060841:log-group:/app/order-service:*",
-                    "name": "/app/order-service"
-                  }
-                ],
-                "queryLanguage": "CWLI",
-                "queryMode": "Logs",
-                "refId": "A",
-                "region": "us-east-1"
-              }
-            },
-            {
-              "refId": "B",
-              "datasourceUid": "__expr__",
-              "model": {
-                "expression": "A",
-                "type": "reduce",
-                "reducer": "last",
-                "refId": "B"
-              }
-            },
-            {
-              "refId": "C",
-              "datasourceUid": "__expr__",
-              "model": {
-                "expression": "B",
-                "type": "threshold",
-                "refId": "C",
-                "conditions": [
-                  {
-                    "evaluator": {
-                      "type": "gt",
-                      "params": [0]
-                    },
-                    "operator": {
-                      "type": "and"
-                    }
-                  }
-                ]
-              }
-            }
-          ],
-          "noDataState": "NoData",
-          "execErrState": "Error",
-          "for": "2m",
-          "isPaused": false,
-          "notification_settings": {
-            "receiver": "SNS - Grafana Alerts"
-          }
-        }
-      ]
-    }
-  ]
-}
+name: Deploy Grafana Workspace
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy CloudFormation Stack
+        run: |
+          aws cloudformation deploy \
+            --template-file cfn/grafana-workspace.yaml \
+            --stack-name grafana-workspace-stack \
+            --capabilities CAPABILITY_NAMED_IAM
+
+      - name: Push Grafana Data Source
+        run: |
+          curl -X POST \
+          -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          -d @datasource.json \
+          https://g-a07f04a423.grafana-workspace.us-east-1.amazonaws.com/api/datasources
+
+      - name: Push Grafana Dashboard
+        run: |
+          curl -X POST \
+          -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          -d @dashboard.json \
+          https://g-a07f04a423.grafana-workspace.us-east-1.amazonaws.com/api/dashboards/db
+
+      - name: Push Grafana Alerts
+        run: |
+          curl -X POST \
+          -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          -d @alert.json \
+          https://g-a07f04a423.grafana-workspace.us-east-1.amazonaws.com/api/v1/provisioning/alert-rules
