@@ -1,4 +1,4 @@
-name: Deploy SNS
+name: Deploy Grafana Workspace
 on:
   push:
     branches:
@@ -22,6 +22,6 @@ jobs:
       - name: Deploy CloudFormation Stack
         run: |
           aws cloudformation deploy \
-            --template-file cfn/sns.yaml \
-            --stack-name grafana-sns-stack \
+            --template-file cfn/grafana-workspace.yaml \
+            --stack-name grafana-workspace-stack \
             --capabilities CAPABILITY_NAMED_IAM
