@@ -41,3 +41,11 @@ jobs:
           -H "Content-Type: application/json" \
           -d @dashboard.json \
           https://g-a07f04a423.grafana-workspace.us-east-1.amazonaws.com/api/dashboards/db
+
+      - name: Push Grafana Alerts
+        run: |
+          curl -X POST \
+          -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          -d @alert.json \
+          https://g-a07f04a423.grafana-workspace.us-east-1.amazonaws.com/api/v1/provisioning/alert-rules
