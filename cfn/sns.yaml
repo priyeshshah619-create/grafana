@@ -17,12 +17,12 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service: events.amazonaws.com
+              Service: cloudwatch.amazonaws.com
             Action: sns:Publish
             Resource: !Ref GrafanaAlertsTopic
           - Effect: Allow
             Principal:
-              Service: cloudwatch.amazonaws.com
+              Service: events.amazonaws.com
             Action: sns:Publish
             Resource: !Ref GrafanaAlertsTopic
 
