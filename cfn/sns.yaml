@@ -1,11 +1,30 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: SNS topic for Grafana alerts
+Description: SNS topic for Grafana alerts with required permissions
 
 Resources:
   GrafanaAlertsTopic:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: grafana-alerts
+
+  GrafanaAlertsTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref GrafanaAlertsTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref GrafanaAlertsTopic
+          - Effect: Allow
+            Principal:
+              Service: cloudwatch.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref GrafanaAlertsTopic
 
 Outputs:
   TopicArn:
