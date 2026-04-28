@@ -1,31 +1,36 @@
-#!/bin/bash
+# AWS Managed Grafana Observability – End-to-End Automation
 
-# Use your actual workspace URL found in your browser tab
-GRAFANA_URL="https://g-a07f04a423.grafana-workspace.us-east-1.amazonaws.com"
-# It is better to pass the key as an environment variable: export GRAFANA_API_TOKEN='your-key'
-API_KEY="${GRAFANA_API_TOKEN}"
+This repository contains a fully automated observability stack built as part of a technical assessment. It demonstrates the ability to provision infrastructure, configure data sources, and deploy monitoring assets (dashboards/alerts) entirely through code.
 
-echo "🚀 Starting Grafana Provisioning..."
+## 🎯 Assessment Scenario: SNS Health Monitoring
+To demonstrate "Application specific business-driven monitoring," this setup monitors the reliability of an AWS SNS notification system.
+- **Metric**: `NumberOfNotificationsFailed` (CloudWatch).
+- **Automation**: If any notification fails for a 2-minute period, a Grafana Alert is triggered to notify the engineering team.
 
-# 1. Add CloudWatch datasource
-echo "Configuring Data Source..."
-curl -X POST "$GRAFANA_URL/api/datasources" \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d @datasource.json
+## 🚀 Key Requirements Addressed
 
-# 2. Import dashboard
-echo "Importing Dashboard..."
-curl -X POST "$GRAFANA_URL/api/dashboards/db" \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d @dashboard.json
+### 1. Infrastructure as Code (Requirement 1 & 2)
+- **AWS Managed Grafana**: Provisioned via CloudFormation in [grafana-workspace.yaml](./cfn/grafana-workspace.yaml).
+- **SSO Integration**: Configured with `AWS_SSO` for secure workforce identity.
+- **SNS Integration**: Provisioned via [sns.yaml](./cfn/sns.yaml), including the required Topic Policy for CloudWatch permissions.
 
-# 3. Import alerts (Fixed API Path for Amazon Managed Grafana)
-echo "Importing Alert Rules..."
-curl -X POST "$GRAFANA_URL/api/v1/provisioning/alert-rules" \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d @alert.json
+### 2. Automated Provisioning (Requirement 3 & 4)
+- **CI/CD Pipeline**: Uses **GitHub Actions** ([deploy-sns.yaml](.github/workflows/deploy-sns.yaml)) to push configuration changes.
+- **Grafana API**: Automatically provisions the [CloudWatch Data Source](./datasource.json), [Dashboards](./dashboard.json), and [Alert Rules](./alert.json) without manual console intervention.
 
-echo "✅ Done!"
+### 3. Modern Data Collection (Requirement 6 & 7)
+- **OpenTelemetry (OTEL)**: Included [otel-config.yaml](./otel-config.yaml) to demonstrate a standardized, vendor-neutral framework for collecting application metrics and logs.
+- **Consolidation**: Metrics are consolidated from OTLP receivers into AWS CloudWatch as the centralized backend.
+
+### 4. Multi-Cloud Standards (Requirement 5)
+- By using the Grafana API and standard JSON definitions, this architecture is "Cloud Agnostic." The same deployment logic used here for AWS can be extended to Azure Monitor or Google Cloud Monitoring by simply swapping the data source definition.
+
+## ⚙️ Repository Structure
+- `.github/workflows/`: GitHub Action for automated deployment.
+- `cfn/`: CloudFormation templates for AWS Infrastructure.
+- `scripts/`: Manual provisioning backup script.
+- `*.json`: Grafana asset definitions (Data Source, Dashboard, Alerts).
+- `otel-config.yaml`: Standardized OTEL collector configuration.
+
+---
+**Status**: End-to-End Automated 🚀
