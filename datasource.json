@@ -1,8 +1,11 @@
 {
   "name": "CloudWatch",
   "type": "cloudwatch",
+  "uid": "afkhffj6j0n40c",
   "access": "proxy",
   "jsonData": {
+    "authType": "workspace_iam_role",
     "defaultRegion": "us-east-1"
-  }
+  },
+  "editable": true
 }
