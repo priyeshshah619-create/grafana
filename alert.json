@@ -1,0 +1,142 @@
+{
+    "apiVersion": 1,
+    "groups": [
+        {
+            "orgId": 1,
+            "name": "order-service-alerts",
+            "folder": "Order Service Alerts",
+            "interval": "1m",
+            "rules": [
+                {
+                    "uid": "cfkg94oizgj5sf",
+                    "title": "Order Service - Error Rate Breach",
+                    "condition": "C",
+                    "data": [
+                        {
+                            "refId": "A",
+                            "relativeTimeRange": {
+                                "from": 300,
+                                "to": 0
+                            },
+                            "datasourceUid": "ffkcyaybrfxtsf",
+                            "model": {
+                                "dimensions": {},
+                                "expression": "fields @timestamp, @message\r\n| filter @message like /ERROR/\r\n| stats count() as errorCount",
+                                "id": "",
+                                "intervalMs": 1000,
+                                "label": "",
+                                "logGroups": [
+                                    {
+                                        "accountId": "882352060841",
+                                        "arn": "arn:aws:logs:us-east-1:882352060841:log-group:/app/order-service:*",
+                                        "name": "/app/order-service"
+                                    }
+                                ],
+                                "matchExact": false,
+                                "maxDataPoints": 43200,
+                                "metricEditorMode": 0,
+                                "metricName": "",
+                                "metricQueryType": 0,
+                                "namespace": "",
+                                "period": "",
+                                "queryLanguage": "CWLI",
+                                "queryMode": "Logs",
+                                "refId": "A",
+                                "region": "default",
+                                "sqlExpression": "",
+                                "statistic": "Average",
+                                "statsGroups": []
+                            }
+                        },
+                        {
+                            "refId": "B",
+                            "relativeTimeRange": {
+                                "from": 0,
+                                "to": 0
+                            },
+                            "datasourceUid": "__expr__",
+                            "model": {
+                                "conditions": [
+                                    {
+                                        "evaluator": {
+                                            "params": [],
+                                            "type": "gt"
+                                        },
+                                        "operator": {
+                                            "type": "and"
+                                        },
+                                        "query": {
+                                            "params": []
+                                        },
+                                        "reducer": {
+                                            "params": [],
+                                            "type": "last"
+                                        },
+                                        "type": "query"
+                                    }
+                                ],
+                                "datasource": {
+                                    "type": "__expr__",
+                                    "uid": "__expr__"
+                                },
+                                "expression": "A",
+                                "intervalMs": 1000,
+                                "maxDataPoints": 43200,
+                                "reducer": "last",
+                                "refId": "B",
+                                "type": "reduce"
+                            }
+                        },
+                        {
+                            "refId": "C",
+                            "relativeTimeRange": {
+                                "from": 0,
+                                "to": 0
+                            },
+                            "datasourceUid": "__expr__",
+                            "model": {
+                                "conditions": [
+                                    {
+                                        "evaluator": {
+                                            "params": [
+                                                0
+                                            ],
+                                            "type": "gt"
+                                        },
+                                        "operator": {
+                                            "type": "and"
+                                        },
+                                        "query": {
+                                            "params": []
+                                        },
+                                        "reducer": {
+                                            "params": [],
+                                            "type": "last"
+                                        },
+                                        "type": "query"
+                                    }
+                                ],
+                                "datasource": {
+                                    "type": "__expr__",
+                                    "uid": "__expr__"
+                                },
+                                "expression": "B",
+                                "intervalMs": 1000,
+                                "maxDataPoints": 43200,
+                                "refId": "C",
+                                "type": "threshold"
+                            }
+                        }
+                    ],
+                    "noDataState": "NoData",
+                    "execErrState": "Error",
+                    "for": "2m",
+                    "isPaused": false,
+                    "notification_settings": {
+                        "receiver": "SNS - Grafana Alerts"
+                    }
+                }
+            ]
+        }
+    ]
+}
