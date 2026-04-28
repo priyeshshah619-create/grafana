@@ -1,6 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Grafana Workspace with SSO
-
 Resources:
   GrafanaWorkspace:
     Type: AWS::Grafana::Workspace
