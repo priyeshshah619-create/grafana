@@ -1,38 +1,31 @@
-# AWS Managed Grafana Observability – End-to-End Automation
+#!/bin/bash
 
-This project demonstrates how to build a complete observability stack in a **single AWS account** using Infrastructure as Code and automation.
+# Use your actual workspace URL found in your browser tab
+GRAFANA_URL="https://g-a07f04a423.grafana-workspace.us-east-1.amazonaws.com"
+# It is better to pass the key as an environment variable: export GRAFANA_API_TOKEN='your-key'
+API_KEY="${GRAFANA_API_TOKEN}"
 
-It provisions a Grafana workspace, integrates SSO, connects CloudWatch Logs as a data source, creates dashboards and alerts, and sends notifications through SNS — all reproducible from code.
+echo "🚀 Starting Grafana Provisioning..."
 
----
+# 1. Add CloudWatch datasource
+echo "Configuring Data Source..."
+curl -X POST "$GRAFANA_URL/api/datasources" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d @datasource.json
 
-## 🚀 Services Used
+# 2. Import dashboard
+echo "Importing Dashboard..."
+curl -X POST "$GRAFANA_URL/api/dashboards/db" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d @dashboard.json
 
-- Amazon Managed Grafana
-- AWS IAM Identity Center (SSO)
-- Amazon CloudWatch Logs
-- Amazon SNS
-- GitHub Actions
-- AWS CloudFormation (IaC)
+# 3. Import alerts (Fixed API Path for Amazon Managed Grafana)
+echo "Importing Alert Rules..."
+curl -X POST "$GRAFANA_URL/api/v1/provisioning/alert-rules" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d @alert.json
 
----
-
-## 🎯 Observability Scenario
-
-**Order Service Log Monitoring**
-
-A sample application log group `/app/order-service` is used to simulate logs.
-
-Grafana dashboards visualize:
-
-- Log ingestion rate
-- Error count over time
-- Log trends
-
-An alert is configured:
-
-> Trigger SNS notification when **error count > 0 for 2 minutes**
-
----
-
-## 🧱 Architecture Flow
+echo "✅ Done!"
