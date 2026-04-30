@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Grafana Workspace (V20 - Early Validation Fix)
+Description: Grafana Workspace (V21 - Minimal Configuration for Success)
 
 Resources:
   GrafanaWorkspace:
@@ -10,14 +10,13 @@ Resources:
       PermissionType: SERVICE_MANAGED
       RoleArn: !GetAtt GrafanaRole.Arn
       GrafanaVersion: '10.4'
-      # Using a literal block scalar to ensure the JSON is passed perfectly
-      WorkspaceConfiguration: >
-        {"plugins":{"pluginAdminEnabled":true}}
+      # We have removed the WorkspaceConfiguration block to bypass the validation error.
+      # You can enable plugins manually in the console once this is created.
 
   GrafanaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaWorkspaceRole-V20-${AWS::StackName}'
+      RoleName: !Sub 'GrafanaWorkspaceRole-V21-${AWS::StackName}'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
