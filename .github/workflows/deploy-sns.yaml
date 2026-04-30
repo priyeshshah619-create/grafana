@@ -24,7 +24,8 @@ jobs:
           aws cloudformation deploy \
             --template-file cfn/grafana-workspace.yaml \
             --stack-name grafana-workspace-stack \
-            --capabilities CAPABILITY_NAMED_IAM
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset
 
       - name: Get Grafana URL
         id: get_url
@@ -33,21 +34,22 @@ jobs:
             --stack-name grafana-workspace-stack \
             --query "Stacks[0].Outputs[?OutputKey=='WorkspaceEndpoint'].OutputValue" \
             --output text)
+          # Strips https:// to ensure the curl command doesn't have double prefixes
           CLEAN_URL=$(echo $RAW_URL | sed 's|https://||g')
           echo "GRAFANA_URL=https://$CLEAN_URL" >> $GITHUB_ENV
 
       - name: Push Grafana Data Source
         run: |
-          curl -X POST \
-          -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
-          -H "Content-Type: application/json" \
-          -d @datasource.json \
-          ${{ env.GRAFANA_URL }}/api/datasources
+          curl -f -X POST \
+            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d @datasource.json \
+            "${{ env.GRAFANA_URL }}/api/datasources" || echo "Data source already exists or failed silently"
 
       - name: Push Grafana Dashboard
         run: |
-          curl -X POST \
-          -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
-          -H "Content-Type: application/json" \
-          -d @dashboard.json \
-          ${{ env.GRAFANA_URL }}/api/dashboards/db
+          curl -f -X POST \
+            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d @dashboard.json \
+            "${{ env.GRAFANA_URL }}/api/dashboards/db"
