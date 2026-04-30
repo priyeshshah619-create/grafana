@@ -10,13 +10,13 @@ Resources:
       AuthenticationProviders:
         - AWS_SSO
       PermissionType: SERVICE_MANAGED
-      RoleArn: !GetAtt GrafanaRole.Arn
+      RoleArn: !GetAtt GrafanaAdminRole.Arn
 
-  # 2. IAM Role for Grafana & Lambda
-  GrafanaRole:
+  # 2. NEW IAM Role (Renamed to avoid conflict)
+  GrafanaAdminRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaRole-${AWS::StackName}-Final'
+      RoleName: !Sub 'GrafanaAdminRole-${AWS::StackName}-V3'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -30,7 +30,7 @@ Resources:
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: GrafanaConfigPolicy
+        - PolicyName: GrafanaPluginAccess
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -40,13 +40,13 @@ Resources:
                   - grafana:DescribeWorkspace
                 Resource: "*"
 
-  # 3. Lambda Function to install Plugins
-  PluginInstallerFunction:
+  # 3. NEW Lambda Function (Renamed to force fresh deployment)
+  PluginFinalInstaller:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub '${AWS::StackName}-Installer-Final'
+      FunctionName: !Sub '${AWS::StackName}-FinalFix'
       Handler: index.handler
-      Role: !GetAtt GrafanaRole.Arn
+      Role: !GetAtt GrafanaAdminRole.Arn
       Runtime: python3.9
       Timeout: 300
       Code:
@@ -62,7 +62,7 @@ Resources:
               
               try:
                   if event['RequestType'] in ['Create', 'Update']:
-                      # Triggers the actual installation via AWS API
+                      # This is the line that actually installs the plugins
                       client.update_workspace_configuration(
                           workspaceId=workspace_id,
                           configuration=json.dumps({"plugins": plugins})
@@ -72,11 +72,11 @@ Resources:
                   print(f"Error: {str(e)}")
                   cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": str(e)})
 
-  # 4. Custom Resource (Renamed to trigger a fresh installation)
-  PluginTriggerFinal:
+  # 4. NEW Custom Resource Trigger
+  FinalPluginTrigger:
     Type: Custom::GrafanaPluginInstaller
     Properties:
-      ServiceToken: !GetAtt PluginInstallerFunction.Arn
+      ServiceToken: !GetAtt PluginFinalInstaller.Arn
       WorkspaceId: !Ref GrafanaWorkspace
       Plugins:
         - grafana-clock-panel
@@ -86,4 +86,3 @@ Outputs:
   GrafanaEndpoint:
     Description: The endpoint of the Grafana workspace
     Value: !GetAtt GrafanaWorkspace.Endpoint
- 
