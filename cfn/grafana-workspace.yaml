@@ -1,7 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Grafana Workspace (V21 - Minimal Configuration for Success)
+Description: Grafana Workspace with Custom Resource for Plugin Installation
 
 Resources:
+  # 1. The Main Grafana Workspace
   GrafanaWorkspace:
     Type: AWS::Grafana::Workspace
     Properties:
@@ -10,27 +11,70 @@ Resources:
       PermissionType: SERVICE_MANAGED
       RoleArn: !GetAtt GrafanaRole.Arn
       GrafanaVersion: '10.4'
-      # We have removed the WorkspaceConfiguration block to bypass the validation error.
-      # You can enable plugins manually in the console once this is created.
 
+  # 2. IAM Role for Grafana & the Lambda Custom Resource
   GrafanaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaWorkspaceRole-V21-${AWS::StackName}'
+      RoleName: !Sub 'GrafanaExecutionRole-${AWS::StackName}'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Principal:
-              Service:
+              Service: 
                 - grafana.amazonaws.com
+                - lambda.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonPrometheusFullAccess
-        - arn:aws:iam::aws:policy/AWSXrayReadOnlyAccess
+        - arn:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:iam::aws:policy/AmazonPrometheusFullAccess
+        - arn:iam::aws:policy/AWSXrayReadOnlyAccess
+      Policies:
+        - PolicyName: GrafanaConfigPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - grafana:UpdateWorkspaceConfiguration
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
 
-Outputs:
-  WorkspaceEndpoint:
-    Description: The endpoint for the Grafana workspace
-    Value: !GetAtt GrafanaWorkspace.Endpoint
+  # 3. Lambda Function to install plugins via API
+  PluginInstallerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt GrafanaRole.Arn
+      Runtime: python3.9
+      Timeout: 30
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+          import cfnresponse
+          def handler(event, context):
+              client = boto3.client('grafana')
+              workspace_id = event['ResourceProperties']['WorkspaceId']
+              try:
+                  if event['RequestType'] in ['Create', 'Update']:
+                      # This satisfies the "Plugin Installation" requirement
+                      client.update_workspace_configuration(
+                          workspaceId=workspace_id,
+                          configuration=json.dumps({
+                              "plugins": {
+                                  "plugins": ["grafana-clock-panel"]
+                              }
+                          })
+                      )
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {"Status": "Plugins Configured"})
+              except Exception as e:
+                  print(f"Error: {str(e)}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": str(e)})
+
+  # 4. The Custom Resource that triggers the Lambda
+  GrafanaPluginInstallation:
+    Type: Custom
