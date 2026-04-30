@@ -1,125 +1,102 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Grafana Workspace with Robust Custom Resource (Status Polling)
+Description: AWS Managed Grafana Workspace with Plugin Installation via Custom Resource
 
 Resources:
-  # 1. IAM Role (Self-Contained Inline Policy)
-  GrafanaRole:
+  GrafanaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaExecutionRole-${AWS::StackName}'
+      RoleName: !Sub GrafanaExecutionRole-${AWS::StackName}
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Principal:
-              Service: 
+              Service:
                 - grafana.amazonaws.com
                 - lambda.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: GrafanaSelfContainedPolicy
+        - PolicyName: GrafanaPermissions
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action:
-                  - grafana:UpdateWorkspaceConfiguration
                   - grafana:DescribeWorkspace
-                Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:/workspaces/*'
-              - Effect: Allow
-                Action:
-                  - aps:*
-                  - xray:Get*
-                  - xray:BatchGet*
-                  - cloudwatch:Get*
-                  - cloudwatch:List*
-                  - cloudwatch:Describe*
-                  - logs:Describe*
-                  - logs:Get*
-                  - logs:List*
-                Resource: '*'
+                  - grafana:UpdateWorkspaceConfiguration
+                Resource: "*"
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: arn:aws:logs:*:*:*
+                Resource: "*"
 
-  # 2. The Main Grafana Workspace
   GrafanaWorkspace:
     Type: AWS::Grafana::Workspace
     Properties:
       AccountAccessType: CURRENT_ACCOUNT
       AuthenticationProviders: [AWS_SSO]
       PermissionType: SERVICE_MANAGED
-      RoleArn: !GetAtt GrafanaRole.Arn
+      RoleArn: !GetAtt GrafanaExecutionRole.Arn
       GrafanaVersion: '10.4'
 
-  # 3. Enhanced Lambda Function (With Status Polling)
   PluginInstallerFunction:
     Type: AWS::Lambda::Function
     Properties:
-      Handler: index.handler
-      Role: !GetAtt GrafanaRole.Arn
       Runtime: python3.9
-      Timeout: 900 # 15 minutes to allow for workspace activation
+      Handler: index.handler
+      Role: !GetAtt GrafanaExecutionRole.Arn
+      Timeout: 600 # Increased to allow for retries
       Code:
         ZipFile: |
-          import boto3
           import json
-          import cfnresponse
           import time
+          import urllib.request
+          import boto3
+          from botocore.exceptions import ClientError
+
+          def send_response(event, context, status, data):
+              response_body = json.dumps({
+                  'Status': status,
+                  'Reason': f"See logs: {context.log_stream_name}",
+                  'PhysicalResourceId': context.log_stream_name,
+                  'StackId': event['StackId'],
+                  'RequestId': event['RequestId'],
+                  'LogicalResourceId': event['LogicalResourceId'],
+                  'Data': data
+              }).encode()
+              req = urllib.request.Request(event['ResponseURL'], data=response_body, method='PUT', headers={'content-type': ''})
+              urllib.request.urlopen(req)
 
           def handler(event, context):
-              print(f"Received event: {json.dumps(event)}")
-              client = boto3.client('grafana', region_name='us-east-1')
-              workspace_id = event['ResourceProperties']['WorkspaceId']
-              
               if event['RequestType'] == 'Delete':
-                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                  send_response(event, context, 'SUCCESS', {})
                   return
 
-              # 1. Poll for ACTIVE status
-              print(f"Polling workspace {workspace_id} for ACTIVE status...")
-              for i in range(15): # Poll for 7.5 minutes
+              workspace_id = event['ResourceProperties']['WorkspaceId']
+              client = boto3.client('grafana', region_name='us-east-1')
+
+              # Retry loop to handle "Workspace does not exist" or "Internal Error" during propagation
+              for attempt in range(10):
                   try:
-                      response = client.describe_workspace(workspaceId=workspace_id)
-                      status = response['workspace']['status']
-                      print(f"Current status: {status}")
-                      if status == 'ACTIVE':
-                          break
-                  except Exception as e:
-                      print(f"Polling error: {str(e)}")
-                  time.sleep(30)
-              
-              # 2. Extra buffer for internal propagation
-              time.sleep(60)
-              
-              # 3. Attempt configuration update
-              attempts = 0
-              last_error = ""
-              while attempts < 5:
-                  try:
-                      print(f"Attempt {attempts + 1}: Updating configuration...")
+                      print(f"Attempt {attempt + 1}: Updating configuration for {workspace_id}")
                       client.update_workspace_configuration(
                           workspaceId=workspace_id,
                           configuration=json.dumps({
-                              "plugins": { "plugins": ["grafana-clock-panel"] }
+                              "plugins": {"plugins": ["grafana-clock-panel", "grafana-piechart-panel"]}
                           })
                       )
-                      print("SUCCESS: Configuration applied.")
-                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {"Status": "Success"})
+                      send_response(event, context, 'SUCCESS', {"Message": "Plugins installed"})
                       return
                   except Exception as e:
-                      last_error = str(e)
-                      print(f"Update failed: {last_error}")
-                      attempts += 1
-                      time.sleep(45)
+                      print(f"Error: {str(e)}")
+                      # Wait 30 seconds before retrying
+                      time.sleep(30)
               
-              cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": f"Final error: {last_error}"})
+              send_response(event, context, 'FAILED', {"Error": "Timed out waiting for Grafana API"})
 
-  # 4. The Custom Resource
-  GrafanaPluginInstallation:
+  GrafanaPluginInstaller:
     Type: Custom::GrafanaPluginInstaller
     Properties:
       ServiceToken: !GetAtt PluginInstallerFunction.Arn
@@ -127,5 +104,5 @@ Resources:
 
 Outputs:
   WorkspaceEndpoint:
-    Description: The endpoint for the Grafana workspace
+    Description: Grafana Workspace URL
     Value: !GetAtt GrafanaWorkspace.Endpoint
