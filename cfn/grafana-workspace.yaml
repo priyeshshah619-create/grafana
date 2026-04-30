@@ -1,11 +1,11 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: AWS Managed Grafana 10.4 – SSO + Automated Plugin Installation (V13)
+Description: AWS Managed Grafana 10.4 – SSO + Automated Plugin Installation (V14 Final)
 
 Resources:
   GrafanaServiceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaServiceRole-${AWS::StackName}-V13'
+      RoleName: !Sub 'GrafanaServiceRole-${AWS::StackName}-V14'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -34,7 +34,7 @@ Resources:
   PluginLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaPluginLambdaRole-${AWS::StackName}-V13'
+      RoleName: !Sub 'GrafanaPluginLambdaRole-${AWS::StackName}-V14'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -59,7 +59,7 @@ Resources:
   PluginInstallerLambda:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub '${AWS::StackName}-FinalFix-V13'
+      FunctionName: !Sub '${AWS::StackName}-PluginFix-V14'
       Runtime: python3.9
       Handler: index.handler
       Timeout: 300
@@ -83,11 +83,9 @@ Resources:
                       plugins = event['ResourceProperties']['Plugins']
                       client = boto3.client('grafana')
                       ws = client.describe_workspace(workspaceId=wid)['workspace']
-                      endpoint = ws['endpoint']
-                      if not endpoint.startswith('http'):
-                          endpoint = f"https://{endpoint}"
+                      endpoint = f"https://{ws['endpoint']}" if not ws['endpoint'].startswith('http') else ws['endpoint']
                       key_res = client.create_workspace_api_key(
-                          workspaceId=wid, keyName='plugin-installer-v13',
+                          workspaceId=wid, keyName='plugin-installer-v14',
                           keyRole='ADMIN', secondsToLive=600
                       )
                       key = key_res['key']
@@ -95,13 +93,13 @@ Resources:
                       time.sleep(30)
                       for p in plugins:
                           url = f"{endpoint}/api/plugins/{p}/install"
-                          http.request("POST", url, headers=headers)
+                          http.request("POST", url, headers=headers, body='{}')
                       client.delete_workspace_api_key(workspaceId=wid, keyId=key_res['id'])
                   send(event, context, "SUCCESS")
               except Exception as e:
                   send(event, context, "FAILED", str(e))
 
-  PluginTriggerV13:
+  PluginTriggerV14:
     Type: Custom::GrafanaPluginInstall
     DependsOn: GrafanaWorkspace
     Properties:
