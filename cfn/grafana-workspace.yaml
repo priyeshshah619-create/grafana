@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Grafana Workspace with Custom Resource (Reviewer-Ready)
 
 Resources:
-  # 1. IAM Role (Fixed Policies to resolve CREATE_FAILED)
+  # 1. IAM Role (Consolidated Policies to bypass ARN validation errors)
   GrafanaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -18,18 +18,27 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:iam::aws:policy/service-role/AWSGrafanaWorkspaceRole
-        - arn:iam::aws:policy/AmazonPrometheusFullAccess
-        - arn:iam::aws:policy/AWSXrayReadOnlyAccess
       Policies:
         - PolicyName: GrafanaCustomResourcePolicy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
+              # Permission for Grafana Configuration
               - Effect: Allow
                 Action:
                   - grafana:UpdateWorkspaceConfiguration
                   - grafana:DescribeWorkspace
                 Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:/workspaces/*'
+              # Permission for Data Sources (Prometheus & X-Ray)
+              - Effect: Allow
+                Action:
+                  - aps:*
+                  - xray:Get*
+                  - xray:BatchGet*
+                  - cloudwatch:Get*
+                  - cloudwatch:List*
+                Resource: '*'
+              # Permission for Lambda Logging
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
@@ -78,7 +87,7 @@ Resources:
                   print(f"Error: {str(e)}")
                   cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": str(e)})
 
-  # 4. The Custom Resource for Plugin Installation
+  # 4. The Custom Resource
   GrafanaPluginInstallation:
     Type: Custom::GrafanaPluginInstaller
     Properties:
