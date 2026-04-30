@@ -1,30 +1,16 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: AWS Managed Grafana 10.4 – SSO + Automated Plugin Installation (V15 SUCCESS)
+Description: Grafana Workspace with SSO and Plugin Installation (V15 Final)
 
 Resources:
-  GrafanaServiceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub 'GrafanaServiceRole-${AWS::StackName}-V15'
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: grafana.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
-
+  # 1. The Grafana Workspace
   GrafanaWorkspace:
     Type: AWS::Grafana::Workspace
     Properties:
       AccountAccessType: CURRENT_ACCOUNT
       AuthenticationProviders: [AWS_SSO]
       PermissionType: SERVICE_MANAGED
-      RoleArn: !GetAtt GrafanaServiceRole.Arn
+      RoleArn: !GetAtt GrafanaRole.Arn
       GrafanaVersion: '10.4'
-      # CRITICAL: This must remain WorkspaceConfiguration for 10.4 CFN
       WorkspaceConfiguration: |
         {
           "plugins": {
@@ -32,18 +18,22 @@ Resources:
           }
         }
 
-  PluginLambdaRole:
+  # 2. IAM Role for Grafana & Lambda
+  GrafanaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaPluginLambdaRole-${AWS::StackName}-V15'
+      RoleName: !Sub 'GrafanaWorkspaceRole-V15-${AWS::StackName}'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Principal:
-              Service: lambda.amazonaws.com
+              Service:
+                - grafana.amazonaws.com
+                - lambda.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
         - PolicyName: GrafanaApiAccess
@@ -57,14 +47,14 @@ Resources:
                   - grafana:DeleteWorkspaceApiKey
                 Resource: "*"
 
-  PluginInstallerLambda:
+  # 3. Lambda Function to install Plugins
+  PluginInstallerFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub '${AWS::StackName}-PluginFix-V15'
-      Runtime: python3.9
       Handler: index.handler
+      Role: !GetAtt GrafanaRole.Arn
+      Runtime: python3.9
       Timeout: 300
-      Role: !GetAtt PluginLambdaRole.Arn
       Code:
         ZipFile: |
           import json, boto3, urllib3, time
@@ -86,7 +76,7 @@ Resources:
                       ws = client.describe_workspace(workspaceId=wid)['workspace']
                       endpoint = f"https://{ws['endpoint']}" if not ws['endpoint'].startswith('http') else ws['endpoint']
                       key_res = client.create_workspace_api_key(
-                          workspaceId=wid, keyName='plugin-installer-v15',
+                          workspaceId=wid, keyName='installer-v15',
                           keyRole='ADMIN', secondsToLive=600
                       )
                       key = key_res['key']
@@ -94,23 +84,23 @@ Resources:
                       time.sleep(30)
                       for p in plugins:
                           url = f"{endpoint}/api/plugins/{p}/install"
-                          # Mandatory body='{}' for Grafana 10.4 API
                           http.request("POST", url, headers=headers, body='{}')
                       client.delete_workspace_api_key(workspaceId=wid, keyId=key_res['id'])
                   send(event, context, "SUCCESS")
               except Exception as e:
                   send(event, context, "FAILED", str(e))
 
-  PluginTriggerV15:
-    Type: Custom::GrafanaPluginInstall
+  # 4. The Custom Resource Trigger
+  GrafanaPluginInstallation:
+    Type: Custom::GrafanaPlugin
     DependsOn: GrafanaWorkspace
     Properties:
-      ServiceToken: !GetAtt PluginInstallerLambda.Arn
+      ServiceToken: !GetAtt PluginInstallerFunction.Arn
       WorkspaceId: !Ref GrafanaWorkspace
       Plugins:
         - grafana-clock-panel
         - grafana-piechart-panel
 
 Outputs:
-  GrafanaEndpoint:
+  WorkspaceEndpoint:
     Value: !GetAtt GrafanaWorkspace.Endpoint
