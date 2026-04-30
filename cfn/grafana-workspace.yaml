@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Grafana Workspace (V19 Clean Start - No Lambda)
+Description: Grafana Workspace (V19 Clean Start - Stable)
 
 Resources:
   GrafanaWorkspace:
@@ -10,7 +10,7 @@ Resources:
       PermissionType: SERVICE_MANAGED
       RoleArn: !GetAtt GrafanaRole.Arn
       GrafanaVersion: '10.4'
-      # Single line format to avoid YAML boolean parsing errors
+      # String format prevents the boolean parsing error
       WorkspaceConfiguration: '{"plugins":{"pluginAdminEnabled":true}}'
 
   GrafanaRole:
