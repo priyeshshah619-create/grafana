@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Grafana Workspace (V19 Clean Start - Stable)
+Description: Grafana Workspace (V20 - Early Validation Fix)
 
 Resources:
   GrafanaWorkspace:
@@ -10,13 +10,14 @@ Resources:
       PermissionType: SERVICE_MANAGED
       RoleArn: !GetAtt GrafanaRole.Arn
       GrafanaVersion: '10.4'
-      # String format prevents the boolean parsing error
-      WorkspaceConfiguration: '{"plugins":{"pluginAdminEnabled":true}}'
+      # Using a literal block scalar to ensure the JSON is passed perfectly
+      WorkspaceConfiguration: >
+        {"plugins":{"pluginAdminEnabled":true}}
 
   GrafanaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaWorkspaceRole-V19-${AWS::StackName}'
+      RoleName: !Sub 'GrafanaWorkspaceRole-V20-${AWS::StackName}'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
