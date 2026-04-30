@@ -1,8 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Grafana Workspace with Custom Resource (Reviewer-Ready)
+Description: Grafana Workspace with Custom Resource (Self-Contained Policies)
 
 Resources:
-  # 1. IAM Role (Consolidated Policies to bypass ARN validation errors)
+  # 1. IAM Role (Completely Custom Inline Policy - No Managed ARNs)
   GrafanaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -16,20 +16,18 @@ Resources:
                 - grafana.amazonaws.com
                 - lambda.amazonaws.com
             Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:iam::aws:policy/service-role/AWSGrafanaWorkspaceRole
       Policies:
-        - PolicyName: GrafanaCustomResourcePolicy
+        - PolicyName: GrafanaSelfContainedPolicy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              # Permission for Grafana Configuration
+              # Custom Resource Permissions
               - Effect: Allow
                 Action:
                   - grafana:UpdateWorkspaceConfiguration
                   - grafana:DescribeWorkspace
                 Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:/workspaces/*'
-              # Permission for Data Sources (Prometheus & X-Ray)
+              # Standard Grafana Data Source Permissions (Prometheus/CW/Xray)
               - Effect: Allow
                 Action:
                   - aps:*
@@ -37,8 +35,12 @@ Resources:
                   - xray:BatchGet*
                   - cloudwatch:Get*
                   - cloudwatch:List*
+                  - cloudwatch:Describe*
+                  - logs:Describe*
+                  - logs:Get*
+                  - logs:List*
                 Resource: '*'
-              # Permission for Lambda Logging
+              # Lambda Function Logging
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
