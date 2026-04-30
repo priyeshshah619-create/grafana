@@ -1,11 +1,11 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: AWS Managed Grafana 10.4 – SSO + Automated Plugin Installation (Final Corrected Schema)
+Description: AWS Managed Grafana 10.4 – SSO + Automated Plugin Installation (Fixed Schema)
 
 Resources:
   GrafanaServiceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaServiceRole-${AWS::StackName}-V10'
+      RoleName: !Sub 'GrafanaServiceRole-${AWS::StackName}-V11'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -20,12 +20,11 @@ Resources:
     Type: AWS::Grafana::Workspace
     Properties:
       AccountAccessType: CURRENT_ACCOUNT
-      AuthenticationProviders:
-        - AWS_SSO
+      AuthenticationProviders: [AWS_SSO]
       PermissionType: SERVICE_MANAGED
       RoleArn: !GetAtt GrafanaServiceRole.Arn
       GrafanaVersion: '10.4'
-      # Ensuring this is properly formatted for the CFN schema
+      # FIXED: The property name for v10.4 is "Configuration"
       Configuration: |
         {
           "plugins": {
@@ -36,7 +35,7 @@ Resources:
   PluginLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaPluginLambdaRole-${AWS::StackName}-V10'
+      RoleName: !Sub 'GrafanaPluginLambdaRole-${AWS::StackName}-V11'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -55,12 +54,13 @@ Resources:
                 Action:
                   - grafana:DescribeWorkspace
                   - grafana:CreateWorkspaceApiKey
+                  - grafana:DeleteWorkspaceApiKey
                 Resource: "*"
 
   PluginInstallerLambda:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub '${AWS::StackName}-FinalFix-V10'
+      FunctionName: !Sub '${AWS::StackName}-FinalFix-V11'
       Runtime: python3.9
       Handler: index.handler
       Timeout: 300
@@ -86,7 +86,7 @@ Resources:
                       ws = client.describe_workspace(workspaceId=wid)['workspace']
                       endpoint = f"https://{ws['endpoint']}" if not ws['endpoint'].startswith('http') else ws['endpoint']
                       key_res = client.create_workspace_api_key(
-                          workspaceId=wid, keyName='plugin-installer-v10',
+                          workspaceId=wid, keyName='plugin-installer-v11',
                           keyRole='ADMIN', secondsToLive=600
                       )
                       key = key_res['key']
@@ -99,7 +99,7 @@ Resources:
               except Exception as e:
                   send(event, context, "FAILED", str(e))
 
-  PluginTriggerV10:
+  PluginTriggerV11:
     Type: Custom::GrafanaPluginInstall
     DependsOn: GrafanaWorkspace
     Properties:
@@ -108,3 +108,7 @@ Resources:
       Plugins:
         - grafana-clock-panel
         - grafana-piechart-panel
+
+Outputs:
+  GrafanaEndpoint:
+    Value: !GetAtt GrafanaWorkspace.Endpoint
