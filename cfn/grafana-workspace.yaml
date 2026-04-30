@@ -2,78 +2,67 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Grafana Workspace with SSO and Custom Resource for Plugin Installation
 
 Resources:
-  # 1. The Grafana Workspace
   GrafanaWorkspace:
     Type: AWS::Grafana::Workspace
     Properties:
       AccountAccessType: CURRENT_ACCOUNT
-      AuthenticationProviders:
-        - AWS_SSO
+      AuthenticationProviders: [AWS_SSO]
       PermissionType: SERVICE_MANAGED
       RoleArn: !GetAtt GrafanaAdminRole.Arn
 
-  # 2. NEW IAM Role (Renamed to avoid conflict)
   GrafanaAdminRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaAdminRole-${AWS::StackName}-V3'
+      RoleName: !Sub 'GrafanaAdminRole-${AWS::StackName}-Final-V4'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Principal:
-              Service:
-                - grafana.amazonaws.com
-                - lambda.amazonaws.com
+              Service: [grafana.amazonaws.com, lambda.amazonaws.com]
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: GrafanaPluginAccess
+        - PolicyName: GrafanaFullAccess
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
-                Action:
-                  - grafana:UpdateWorkspaceConfiguration
-                  - grafana:DescribeWorkspace
+                Action: ["grafana:*"]
                 Resource: "*"
 
-  # 3. NEW Lambda Function (Renamed to force fresh deployment)
   PluginFinalInstaller:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub '${AWS::StackName}-FinalFix'
+      FunctionName: !Sub '${AWS::StackName}-FinalFix-V4'
       Handler: index.handler
       Role: !GetAtt GrafanaAdminRole.Arn
       Runtime: python3.9
       Timeout: 300
       Code:
         ZipFile: |
-          import json
-          import boto3
-          import cfnresponse
-
+          import json, boto3, cfnresponse, time
           def handler(event, context):
               client = boto3.client('grafana')
-              workspace_id = event['ResourceProperties'].get('WorkspaceId')
-              plugins = event['ResourceProperties'].get('Plugins', [])
-              
+              wid = event['ResourceProperties'].get('WorkspaceId')
+              p = event['ResourceProperties'].get('Plugins', [])
               try:
                   if event['RequestType'] in ['Create', 'Update']:
-                      # This is the line that actually installs the plugins
+                      # Wait 10 seconds to ensure workspace is ready for config
+                      time.sleep(10)
                       client.update_workspace_configuration(
-                          workspaceId=workspace_id,
-                          configuration=json.dumps({"plugins": plugins})
+                          workspaceId=wid,
+                          configuration=json.dumps({"plugins": p})
                       )
                   cfnresponse.send(event, context, cfnresponse.SUCCESS, {"Status": "Success"})
               except Exception as e:
                   print(f"Error: {str(e)}")
                   cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": str(e)})
 
-  # 4. NEW Custom Resource Trigger
-  FinalPluginTrigger:
+  # CHANGED NAME AGAIN TO FORCE RE-RUN
+  FinalPluginTriggerV4:
     Type: Custom::GrafanaPluginInstaller
     Properties:
       ServiceToken: !GetAtt PluginFinalInstaller.Arn
@@ -84,5 +73,4 @@ Resources:
 
 Outputs:
   GrafanaEndpoint:
-    Description: The endpoint of the Grafana workspace
     Value: !GetAtt GrafanaWorkspace.Endpoint
