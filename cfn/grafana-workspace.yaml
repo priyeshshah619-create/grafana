@@ -1,8 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Grafana Workspace with Custom Resource (Plugin Retry Logic)
+Description: Grafana Workspace with Robust Custom Resource Plugin Installation
 
 Resources:
-  # 1. IAM Role (Self-Contained)
+  # 1. IAM Role (Self-Contained Inline Policy)
   GrafanaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -55,14 +55,14 @@ Resources:
       RoleArn: !GetAtt GrafanaRole.Arn
       GrafanaVersion: '10.4'
 
-  # 3. Lambda Function (Now with Retries & Delay)
+  # 3. Enhanced Lambda Function
   PluginInstallerFunction:
     Type: AWS::Lambda::Function
     Properties:
       Handler: index.handler
       Role: !GetAtt GrafanaRole.Arn
       Runtime: python3.9
-      Timeout: 300
+      Timeout: 600
       Code:
         ZipFile: |
           import boto3
@@ -71,6 +71,7 @@ Resources:
           import time
 
           def handler(event, context):
+              print(f"Received event: {json.dumps(event)}")
               client = boto3.client('grafana', region_name='us-east-1')
               workspace_id = event['ResourceProperties']['WorkspaceId']
               
@@ -78,29 +79,31 @@ Resources:
                   cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
                   return
 
-              # Wait 30 seconds for the Workspace API to settle
-              time.sleep(30)
+              # Long initial wait for Workspace API activation
+              print("Waiting 60 seconds for Workspace API to stabilize...")
+              time.sleep(60)
               
               attempts = 0
-              max_attempts = 5
-              while attempts < max_attempts:
+              last_error = ""
+              while attempts < 5:
                   try:
+                      print(f"Attempt {attempts + 1}: Updating configuration for {workspace_id}")
                       client.update_workspace_configuration(
                           workspaceId=workspace_id,
                           configuration=json.dumps({
-                              "plugins": {
-                                  "plugins": ["grafana-clock-panel"]
-                              }
+                              "plugins": { "plugins": ["grafana-clock-panel"] }
                           })
                       )
+                      print("SUCCESS: Plugin configuration applied.")
                       cfnresponse.send(event, context, cfnresponse.SUCCESS, {"Status": "Success"})
                       return
                   except Exception as e:
+                      last_error = str(e)
+                      print(f"Attempt {attempts + 1} failed: {last_error}")
                       attempts += 1
-                      print(f"Attempt {attempts} failed: {str(e)}")
-                      time.sleep(20)
+                      time.sleep(30)
               
-              cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": "Grafana API not ready after 5 retries"})
+              cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": f"Failed after 5 retries. Last error: {last_error}"})
 
   # 4. The Custom Resource
   GrafanaPluginInstallation:
