@@ -1,11 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: AWS Managed Grafana 10.4 – SSO + Automated Plugin Installation (V14 Final)
+Description: AWS Managed Grafana 10.4 – SSO + Automated Plugin Installation (FINAL)
 
 Resources:
+
   GrafanaServiceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaServiceRole-${AWS::StackName}-V14'
+      RoleName: !Sub 'GrafanaServiceRole-${AWS::StackName}'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -24,7 +25,7 @@ Resources:
       PermissionType: SERVICE_MANAGED
       RoleArn: !GetAtt GrafanaServiceRole.Arn
       GrafanaVersion: '10.4'
-      WorkspaceConfiguration: |
+      Configuration: |
         {
           "plugins": {
             "pluginAdminEnabled": true
@@ -34,7 +35,7 @@ Resources:
   PluginLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaPluginLambdaRole-${AWS::StackName}-V14'
+      RoleName: !Sub 'GrafanaPluginLambdaRole-${AWS::StackName}'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -59,7 +60,6 @@ Resources:
   PluginInstallerLambda:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub '${AWS::StackName}-PluginFix-V14'
       Runtime: python3.9
       Handler: index.handler
       Timeout: 300
@@ -67,39 +67,64 @@ Resources:
       Code:
         ZipFile: |
           import json, boto3, urllib3, time
+
           http = urllib3.PoolManager()
+
           def send(event, context, status, reason="OK"):
               response_body = json.dumps({
-                  "Status": status, "Reason": reason,
+                  "Status": status,
+                  "Reason": reason,
                   "PhysicalResourceId": context.log_stream_name,
-                  "StackId": event['StackId'], "RequestId": event['RequestId'],
-                  "LogicalResourceId": event['LogicalResourceId'], "Data": {}
+                  "StackId": event['StackId'],
+                  "RequestId": event['RequestId'],
+                  "LogicalResourceId": event['LogicalResourceId'],
+                  "Data": {}
               })
               http.request("PUT", event['ResponseURL'], body=response_body)
+
           def handler(event, context):
               try:
                   if event['RequestType'] in ['Create', 'Update']:
                       wid = event['ResourceProperties']['WorkspaceId']
                       plugins = event['ResourceProperties']['Plugins']
+
                       client = boto3.client('grafana')
                       ws = client.describe_workspace(workspaceId=wid)['workspace']
-                      endpoint = f"https://{ws['endpoint']}" if not ws['endpoint'].startswith('http') else ws['endpoint']
+
+                      endpoint = ws['endpoint']
+                      if not endpoint.startswith('http'):
+                          endpoint = f"https://{endpoint}"
+
                       key_res = client.create_workspace_api_key(
-                          workspaceId=wid, keyName='plugin-installer-v14',
-                          keyRole='ADMIN', secondsToLive=600
+                          workspaceId=wid,
+                          keyName='plugin-installer',
+                          keyRole='ADMIN',
+                          secondsToLive=600
                       )
+
                       key = key_res['key']
-                      headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+                      headers = {
+                          "Authorization": f"Bearer {key}",
+                          "Content-Type": "application/json"
+                      }
+
                       time.sleep(30)
+
                       for p in plugins:
                           url = f"{endpoint}/api/plugins/{p}/install"
                           http.request("POST", url, headers=headers, body='{}')
-                      client.delete_workspace_api_key(workspaceId=wid, keyId=key_res['id'])
+
+                      client.delete_workspace_api_key(
+                          workspaceId=wid,
+                          keyId=key_res['id']
+                      )
+
                   send(event, context, "SUCCESS")
+
               except Exception as e:
                   send(event, context, "FAILED", str(e))
 
-  PluginTriggerV14:
+  PluginTrigger:
     Type: Custom::GrafanaPluginInstall
     DependsOn: GrafanaWorkspace
     Properties:
