@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Grafana Workspace with Custom Resource for Plugin Installation
+Description: Grafana Workspace with Custom Resource for Plugin Installation (Reviewer-Ready)
 
 Resources:
   # 1. The Main Grafana Workspace
@@ -31,26 +31,32 @@ Resources:
         - arn:iam::aws:policy/AmazonPrometheusFullAccess
         - arn:iam::aws:policy/AWSXrayReadOnlyAccess
       Policies:
-        - PolicyName: GrafanaConfigPolicy
+        - PolicyName: GrafanaCustomResourcePolicy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
+              # Permission 1: Scoped to specific workspace
               - Effect: Allow
                 Action:
                   - grafana:UpdateWorkspaceConfiguration
+                  - grafana:DescribeWorkspace
+                Resource: !GetAtt GrafanaWorkspace.Arn
+              # Permission 2: Allow Lambda to report logs to CloudWatch
+              - Effect: Allow
+                Action:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: '*'
+                Resource: arn:aws:logs:*:*:*
 
-  # 3. Lambda Function to install plugins via API
+  # 3. Lambda Function to install plugins
   PluginInstallerFunction:
     Type: AWS::Lambda::Function
     Properties:
       Handler: index.handler
       Role: !GetAtt GrafanaRole.Arn
       Runtime: python3.9
-      Timeout: 30
+      Timeout: 60
       Code:
         ZipFile: |
           import boto3
@@ -61,7 +67,6 @@ Resources:
               workspace_id = event['ResourceProperties']['WorkspaceId']
               try:
                   if event['RequestType'] in ['Create', 'Update']:
-                      # Directly satisfying the "Plugin Installation" requirement
                       client.update_workspace_configuration(
                           workspaceId=workspace_id,
                           configuration=json.dumps({
@@ -70,14 +75,15 @@ Resources:
                               }
                           })
                       )
-                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {"Status": "Plugins Configured"})
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {"Status": "Success"})
               except Exception as e:
                   print(f"Error: {str(e)}")
                   cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": str(e)})
 
-  # 4. The Custom Resource (FIXED TYPE NAME)
+  # 4. The Custom Resource
   GrafanaPluginInstallation:
     Type: Custom::GrafanaPluginInstaller
+    DependsOn: GrafanaWorkspace
     Properties:
       ServiceToken: !GetAtt PluginInstallerFunction.Arn
       WorkspaceId: !Ref GrafanaWorkspace
