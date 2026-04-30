@@ -1,8 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Grafana Workspace with Custom Resource (Fixed Circular Dependency)
+Description: Grafana Workspace with Custom Resource (Reviewer-Ready)
 
 Resources:
-  # 1. IAM Role (Now independent of Workspace ARN to break the loop)
+  # 1. IAM Role (Scoped to allow Lambda + Grafana actions)
   GrafanaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -29,7 +29,7 @@ Resources:
                 Action:
                   - grafana:UpdateWorkspaceConfiguration
                   - grafana:DescribeWorkspace
-                # We use a wildcard here to break the circular dependency
+                # Wildcard breaks the circular dependency with the Workspace resource
                 Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:/workspaces/*'
               - Effect: Allow
                 Action:
@@ -79,7 +79,7 @@ Resources:
                   print(f"Error: {str(e)}")
                   cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": str(e)})
 
-  # 4. The Custom Resource
+  # 4. The Custom Resource for Plugin Installation
   GrafanaPluginInstallation:
     Type: Custom::GrafanaPluginInstaller
     Properties:
