@@ -2,6 +2,7 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Grafana Workspace with SSO and Custom Resource for Plugin Installation
 
 Resources:
+  # 1. The Grafana Workspace
   GrafanaWorkspace:
     Type: AWS::Grafana::Workspace
     Properties:
@@ -10,10 +11,11 @@ Resources:
       PermissionType: SERVICE_MANAGED
       RoleArn: !GetAtt GrafanaAdminRole.Arn
 
+  # 2. IAM Role for Lambda and Grafana
   GrafanaAdminRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaAdminRole-${AWS::StackName}-V5'
+      RoleName: !Sub 'GrafanaAdminRole-${AWS::StackName}-V6'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -33,10 +35,11 @@ Resources:
                 Action: ["grafana:*"]
                 Resource: "*"
 
+  # 3. Lambda Installer (No cfnresponse dependency)
   PluginFinalInstaller:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub '${AWS::StackName}-FinalFix-V5'
+      FunctionName: !Sub '${AWS::StackName}-FinalFix-V6'
       Handler: index.handler
       Role: !GetAtt GrafanaAdminRole.Arn
       Runtime: python3.9
@@ -52,7 +55,8 @@ Resources:
               reason = "Done"
               try:
                   if event['RequestType'] in ['Create', 'Update']:
-                      time.sleep(5)
+                      # Small buffer for stability
+                      time.sleep(10)
                       client.update_workspace_configuration(
                           workspaceId=wid,
                           configuration=json.dumps({"plugins": p})
@@ -62,7 +66,7 @@ Resources:
                   status = "FAILED"
                   reason = str(e)
               
-              # Manual signal to CloudFormation (replacing cfnresponse)
+              # Signal CloudFormation manually via urllib3
               response_body = json.dumps({
                   "Status": status,
                   "Reason": reason,
@@ -75,9 +79,10 @@ Resources:
               http = urllib3.PoolManager()
               http.request('PUT', event['ResponseURL'], body=response_body)
 
-  # Using V5 to force a clean start
-  FinalPluginTriggerV5:
+  # 4. Trigger - Added DependsOn to prevent conflict
+  FinalPluginTriggerV6:
     Type: Custom::GrafanaPluginInstaller
+    DependsOn: GrafanaWorkspace
     Properties:
       ServiceToken: !GetAtt PluginFinalInstaller.Arn
       WorkspaceId: !Ref GrafanaWorkspace
