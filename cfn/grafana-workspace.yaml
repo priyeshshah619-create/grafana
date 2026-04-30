@@ -1,18 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Grafana Workspace with Custom Resource for Plugin Installation (Reviewer-Ready)
+Description: Grafana Workspace with Custom Resource (Fixed Circular Dependency)
 
 Resources:
-  # 1. The Main Grafana Workspace
-  GrafanaWorkspace:
-    Type: AWS::Grafana::Workspace
-    Properties:
-      AccountAccessType: CURRENT_ACCOUNT
-      AuthenticationProviders: [AWS_SSO]
-      PermissionType: SERVICE_MANAGED
-      RoleArn: !GetAtt GrafanaRole.Arn
-      GrafanaVersion: '10.4'
-
-  # 2. IAM Role for Grafana & the Lambda Custom Resource
+  # 1. IAM Role (Now independent of Workspace ARN to break the loop)
   GrafanaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -35,19 +25,28 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              # Permission 1: Scoped to specific workspace
               - Effect: Allow
                 Action:
                   - grafana:UpdateWorkspaceConfiguration
                   - grafana:DescribeWorkspace
-                Resource: !GetAtt GrafanaWorkspace.Arn
-              # Permission 2: Allow Lambda to report logs to CloudWatch
+                # We use a wildcard here to break the circular dependency
+                Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:/workspaces/*'
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: arn:aws:logs:*:*:*
+
+  # 2. The Main Grafana Workspace
+  GrafanaWorkspace:
+    Type: AWS::Grafana::Workspace
+    Properties:
+      AccountAccessType: CURRENT_ACCOUNT
+      AuthenticationProviders: [AWS_SSO]
+      PermissionType: SERVICE_MANAGED
+      RoleArn: !GetAtt GrafanaRole.Arn
+      GrafanaVersion: '10.4'
 
   # 3. Lambda Function to install plugins
   PluginInstallerFunction:
@@ -83,7 +82,6 @@ Resources:
   # 4. The Custom Resource
   GrafanaPluginInstallation:
     Type: Custom::GrafanaPluginInstaller
-    DependsOn: GrafanaWorkspace
     Properties:
       ServiceToken: !GetAtt PluginInstallerFunction.Arn
       WorkspaceId: !Ref GrafanaWorkspace
