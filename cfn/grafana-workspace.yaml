@@ -72,8 +72,8 @@ Resources:
                   print(f"Error: {str(e)}")
                   cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": str(e)})
 
-  # 4. Custom Resource to trigger the Lambda
-  GrafanaPluginInstallation:
+  # 4. Custom Resource to trigger the Lambda (Renamed to V2 to force a fresh run)
+  GrafanaPluginInstallationV2:
     Type: Custom::GrafanaPluginInstallation
     Properties:
       ServiceToken: !GetAtt PluginInstallerFunction.Arn
