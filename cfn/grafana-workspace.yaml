@@ -1,72 +1,81 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Grafana Workspace with SSO and Custom Resource for Plugin Installation
+Description: AWS Managed Grafana 10.4 – SSO + Automated Plugin Installation (Assessment Final)
 
 Resources:
-  # 1. The Grafana Workspace
-  GrafanaWorkspace:
-    Type: AWS::Grafana::Workspace
-    Properties:
-      AccountAccessType: CURRENT_ACCOUNT
-      AuthenticationProviders: [AWS_SSO]
-      PermissionType: SERVICE_MANAGED
-      RoleArn: !GetAtt GrafanaAdminRole.Arn
 
-  # 2. IAM Role for Lambda and Grafana
-  GrafanaAdminRole:
+  # 1. IAM role for Grafana workspace
+  GrafanaServiceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaAdminRole-${AWS::StackName}-V6'
+      RoleName: !Sub 'GrafanaServiceRole-${AWS::StackName}-V10'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Principal:
-              Service: [grafana.amazonaws.com, lambda.amazonaws.com]
+              Service: grafana.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+
+  # 2. Grafana Workspace (v10.4)
+  GrafanaWorkspace:
+    Type: AWS::Grafana::Workspace
+    Properties:
+      AccountAccessType: CURRENT_ACCOUNT
+      AuthenticationProviders:
+        - AWS_SSO
+      PermissionType: SERVICE_MANAGED
+      RoleArn: !GetAtt GrafanaServiceRole.Arn
+      GrafanaVersion: '10.4'
+      WorkspaceConfiguration: |
+        {
+          "plugins": {
+            "pluginAdminEnabled": true
+          }
+        }
+
+  # 3. IAM role for Lambda
+  PluginLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'GrafanaPluginLambdaRole-${AWS::StackName}-V10'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: GrafanaFullAccess
+        - PolicyName: GrafanaApiAccess
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
-                Action: ["grafana:*"]
+                Action:
+                  - grafana:DescribeWorkspace
+                  - grafana:CreateWorkspaceApiKey
                 Resource: "*"
 
-  # 3. Lambda Installer (No cfnresponse dependency)
-  PluginFinalInstaller:
+  # 4. Lambda to install plugins via Grafana API
+  PluginInstallerLambda:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub '${AWS::StackName}-FinalFix-V6'
-      Handler: index.handler
-      Role: !GetAtt GrafanaAdminRole.Arn
+      FunctionName: !Sub '${AWS::StackName}-FinalFix-V10'
       Runtime: python3.9
+      Handler: index.handler
       Timeout: 300
+      Role: !GetAtt PluginLambdaRole.Arn
       Code:
         ZipFile: |
           import json, boto3, urllib3, time
-          def handler(event, context):
-              client = boto3.client('grafana')
-              wid = event['ResourceProperties'].get('WorkspaceId')
-              p = event['ResourceProperties'].get('Plugins', [])
-              status = "SUCCESS"
-              reason = "Done"
-              try:
-                  if event['RequestType'] in ['Create', 'Update']:
-                      # Small buffer for stability
-                      time.sleep(10)
-                      client.update_workspace_configuration(
-                          workspaceId=wid,
-                          configuration=json.dumps({"plugins": p})
-                      )
-              except Exception as e:
-                  print(f"Error: {str(e)}")
-                  status = "FAILED"
-                  reason = str(e)
-              
-              # Signal CloudFormation manually via urllib3
+
+          http = urllib3.PoolManager()
+
+          def send(event, context, status, reason="OK"):
               response_body = json.dumps({
                   "Status": status,
                   "Reason": reason,
@@ -76,20 +85,54 @@ Resources:
                   "LogicalResourceId": event['LogicalResourceId'],
                   "Data": {}
               })
-              http = urllib3.PoolManager()
-              http.request('PUT', event['ResponseURL'], body=response_body)
+              http.request("PUT", event['ResponseURL'], body=response_body)
 
-  # 4. Trigger - Added DependsOn to prevent conflict
-  FinalPluginTriggerV6:
-    Type: Custom::GrafanaPluginInstaller
+          def handler(event, context):
+              try:
+                  if event['RequestType'] in ['Create', 'Update']:
+                      wid = event['ResourceProperties']['WorkspaceId']
+                      plugins = event['ResourceProperties']['Plugins']
+
+                      client = boto3.client('grafana')
+                      ws = client.describe_workspace(workspaceId=wid)['workspace']
+
+                      endpoint = ws['endpoint']
+                      if not endpoint.startswith('http'):
+                          endpoint = f"https://{endpoint}"
+
+                      key_response = client.create_workspace_api_key(
+                          workspaceId=wid,
+                          keyName='plugin-installer-final',
+                          keyRole='ADMIN',
+                          secondsToLive=600
+                      )
+                      key = key_response['key']
+
+                      headers = {
+                          "Authorization": f"Bearer {key}",
+                          "Content-Type": "application/json"
+                      }
+
+                      time.sleep(30)
+
+                      for p in plugins:
+                          url = f"{endpoint}/api/plugins/{p}/install"
+                          res = http.request("POST", url, headers=headers)
+                          print(f"Plugin {p} install status: {res.status}")
+
+                  send(event, context, "SUCCESS")
+
+              except Exception as e:
+                  print(f"Error encountered: {str(e)}")
+                  send(event, context, "FAILED", str(e))
+
+  # 5. Custom resource trigger
+  PluginTriggerV10:
+    Type: Custom::GrafanaPluginInstall
     DependsOn: GrafanaWorkspace
     Properties:
-      ServiceToken: !GetAtt PluginFinalInstaller.Arn
+      ServiceToken: !GetAtt PluginInstallerLambda.Arn
       WorkspaceId: !Ref GrafanaWorkspace
       Plugins:
         - grafana-clock-panel
         - grafana-piechart-panel
-
-Outputs:
-  GrafanaEndpoint:
-    Value: !GetAtt GrafanaWorkspace.Endpoint
