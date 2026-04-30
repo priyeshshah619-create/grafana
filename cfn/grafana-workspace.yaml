@@ -16,7 +16,7 @@ Resources:
   GrafanaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: GrafanaWorkspaceRole-Complete
+      RoleName: !Sub 'GrafanaRole-${AWS::StackName}-Final'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -38,13 +38,13 @@ Resources:
                 Action:
                   - grafana:UpdateWorkspaceConfiguration
                   - grafana:DescribeWorkspace
-                Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:/workspaces/*'
+                Resource: "*"
 
   # 3. Lambda Function to install Plugins
   PluginInstallerFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub '${AWS::StackName}-PluginInstaller'
+      FunctionName: !Sub '${AWS::StackName}-Installer-Final'
       Handler: index.handler
       Role: !GetAtt GrafanaRole.Arn
       Runtime: python3.9
@@ -62,7 +62,7 @@ Resources:
               
               try:
                   if event['RequestType'] in ['Create', 'Update']:
-                      # This is the actual command that installs the plugins
+                      # Triggers the actual installation via AWS API
                       client.update_workspace_configuration(
                           workspaceId=workspace_id,
                           configuration=json.dumps({"plugins": plugins})
@@ -72,9 +72,9 @@ Resources:
                   print(f"Error: {str(e)}")
                   cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": str(e)})
 
-  # 4. Custom Resource to trigger the Lambda (Renamed to V2 to force a fresh run)
-  GrafanaPluginInstallationV2:
-    Type: Custom::GrafanaPluginInstallation
+  # 4. Custom Resource (Renamed to trigger a fresh installation)
+  PluginTriggerFinal:
+    Type: Custom::GrafanaPluginInstaller
     Properties:
       ServiceToken: !GetAtt PluginInstallerFunction.Arn
       WorkspaceId: !Ref GrafanaWorkspace
