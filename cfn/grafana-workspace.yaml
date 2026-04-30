@@ -1,9 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: AWS Managed Grafana 10.4 – SSO + Automated Plugin Installation (Assessment Final)
+Description: AWS Managed Grafana 10.4 – SSO + Automated Plugin Installation (Final Corrected Schema)
 
 Resources:
-
-  # 1. IAM role for Grafana workspace
   GrafanaServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -18,7 +16,6 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
 
-  # 2. Grafana Workspace (v10.4)
   GrafanaWorkspace:
     Type: AWS::Grafana::Workspace
     Properties:
@@ -28,14 +25,14 @@ Resources:
       PermissionType: SERVICE_MANAGED
       RoleArn: !GetAtt GrafanaServiceRole.Arn
       GrafanaVersion: '10.4'
-      WorkspaceConfiguration: |
+      # Ensuring this is properly formatted for the CFN schema
+      Configuration: |
         {
           "plugins": {
             "pluginAdminEnabled": true
           }
         }
 
-  # 3. IAM role for Lambda
   PluginLambdaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -60,7 +57,6 @@ Resources:
                   - grafana:CreateWorkspaceApiKey
                 Resource: "*"
 
-  # 4. Lambda to install plugins via Grafana API
   PluginInstallerLambda:
     Type: AWS::Lambda::Function
     Properties:
@@ -72,61 +68,37 @@ Resources:
       Code:
         ZipFile: |
           import json, boto3, urllib3, time
-
           http = urllib3.PoolManager()
-
           def send(event, context, status, reason="OK"):
               response_body = json.dumps({
-                  "Status": status,
-                  "Reason": reason,
+                  "Status": status, "Reason": reason,
                   "PhysicalResourceId": context.log_stream_name,
-                  "StackId": event['StackId'],
-                  "RequestId": event['RequestId'],
-                  "LogicalResourceId": event['LogicalResourceId'],
-                  "Data": {}
+                  "StackId": event['StackId'], "RequestId": event['RequestId'],
+                  "LogicalResourceId": event['LogicalResourceId'], "Data": {}
               })
               http.request("PUT", event['ResponseURL'], body=response_body)
-
           def handler(event, context):
               try:
                   if event['RequestType'] in ['Create', 'Update']:
                       wid = event['ResourceProperties']['WorkspaceId']
                       plugins = event['ResourceProperties']['Plugins']
-
                       client = boto3.client('grafana')
                       ws = client.describe_workspace(workspaceId=wid)['workspace']
-
-                      endpoint = ws['endpoint']
-                      if not endpoint.startswith('http'):
-                          endpoint = f"https://{endpoint}"
-
-                      key_response = client.create_workspace_api_key(
-                          workspaceId=wid,
-                          keyName='plugin-installer-final',
-                          keyRole='ADMIN',
-                          secondsToLive=600
+                      endpoint = f"https://{ws['endpoint']}" if not ws['endpoint'].startswith('http') else ws['endpoint']
+                      key_res = client.create_workspace_api_key(
+                          workspaceId=wid, keyName='plugin-installer-v10',
+                          keyRole='ADMIN', secondsToLive=600
                       )
-                      key = key_response['key']
-
-                      headers = {
-                          "Authorization": f"Bearer {key}",
-                          "Content-Type": "application/json"
-                      }
-
+                      key = key_res['key']
+                      headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
                       time.sleep(30)
-
                       for p in plugins:
                           url = f"{endpoint}/api/plugins/{p}/install"
-                          res = http.request("POST", url, headers=headers)
-                          print(f"Plugin {p} install status: {res.status}")
-
+                          http.request("POST", url, headers=headers)
                   send(event, context, "SUCCESS")
-
               except Exception as e:
-                  print(f"Error encountered: {str(e)}")
                   send(event, context, "FAILED", str(e))
 
-  # 5. Custom resource trigger
   PluginTriggerV10:
     Type: Custom::GrafanaPluginInstall
     DependsOn: GrafanaWorkspace
