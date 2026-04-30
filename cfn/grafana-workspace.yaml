@@ -13,7 +13,7 @@ Resources:
   GrafanaAdminRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaAdminRole-${AWS::StackName}-Final-V4'
+      RoleName: !Sub 'GrafanaAdminRole-${AWS::StackName}-V5'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -36,33 +36,47 @@ Resources:
   PluginFinalInstaller:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub '${AWS::StackName}-FinalFix-V4'
+      FunctionName: !Sub '${AWS::StackName}-FinalFix-V5'
       Handler: index.handler
       Role: !GetAtt GrafanaAdminRole.Arn
       Runtime: python3.9
       Timeout: 300
       Code:
         ZipFile: |
-          import json, boto3, cfnresponse, time
+          import json, boto3, urllib3, time
           def handler(event, context):
               client = boto3.client('grafana')
               wid = event['ResourceProperties'].get('WorkspaceId')
               p = event['ResourceProperties'].get('Plugins', [])
+              status = "SUCCESS"
+              reason = "Done"
               try:
                   if event['RequestType'] in ['Create', 'Update']:
-                      # Wait 10 seconds to ensure workspace is ready for config
-                      time.sleep(10)
+                      time.sleep(5)
                       client.update_workspace_configuration(
                           workspaceId=wid,
                           configuration=json.dumps({"plugins": p})
                       )
-                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {"Status": "Success"})
               except Exception as e:
                   print(f"Error: {str(e)}")
-                  cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": str(e)})
+                  status = "FAILED"
+                  reason = str(e)
+              
+              # Manual signal to CloudFormation (replacing cfnresponse)
+              response_body = json.dumps({
+                  "Status": status,
+                  "Reason": reason,
+                  "PhysicalResourceId": context.log_stream_name,
+                  "StackId": event['StackId'],
+                  "RequestId": event['RequestId'],
+                  "LogicalResourceId": event['LogicalResourceId'],
+                  "Data": {}
+              })
+              http = urllib3.PoolManager()
+              http.request('PUT', event['ResponseURL'], body=response_body)
 
-  # CHANGED NAME AGAIN TO FORCE RE-RUN
-  FinalPluginTriggerV4:
+  # Using V5 to force a clean start
+  FinalPluginTriggerV5:
     Type: Custom::GrafanaPluginInstaller
     Properties:
       ServiceToken: !GetAtt PluginFinalInstaller.Arn
