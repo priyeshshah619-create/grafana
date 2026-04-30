@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Grafana Workspace with Robust Custom Resource Plugin Installation
+Description: Grafana Workspace with Robust Custom Resource (Status Polling)
 
 Resources:
   # 1. IAM Role (Self-Contained Inline Policy)
@@ -55,14 +55,14 @@ Resources:
       RoleArn: !GetAtt GrafanaRole.Arn
       GrafanaVersion: '10.4'
 
-  # 3. Enhanced Lambda Function
+  # 3. Enhanced Lambda Function (With Status Polling)
   PluginInstallerFunction:
     Type: AWS::Lambda::Function
     Properties:
       Handler: index.handler
       Role: !GetAtt GrafanaRole.Arn
       Runtime: python3.9
-      Timeout: 600
+      Timeout: 900 # 15 minutes to allow for workspace activation
       Code:
         ZipFile: |
           import boto3
@@ -79,31 +79,44 @@ Resources:
                   cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
                   return
 
-              # Long initial wait for Workspace API activation
-              print("Waiting 60 seconds for Workspace API to stabilize...")
+              # 1. Poll for ACTIVE status
+              print(f"Polling workspace {workspace_id} for ACTIVE status...")
+              for i in range(15): # Poll for 7.5 minutes
+                  try:
+                      response = client.describe_workspace(workspaceId=workspace_id)
+                      status = response['workspace']['status']
+                      print(f"Current status: {status}")
+                      if status == 'ACTIVE':
+                          break
+                  except Exception as e:
+                      print(f"Polling error: {str(e)}")
+                  time.sleep(30)
+              
+              # 2. Extra buffer for internal propagation
               time.sleep(60)
               
+              # 3. Attempt configuration update
               attempts = 0
               last_error = ""
               while attempts < 5:
                   try:
-                      print(f"Attempt {attempts + 1}: Updating configuration for {workspace_id}")
+                      print(f"Attempt {attempts + 1}: Updating configuration...")
                       client.update_workspace_configuration(
                           workspaceId=workspace_id,
                           configuration=json.dumps({
                               "plugins": { "plugins": ["grafana-clock-panel"] }
                           })
                       )
-                      print("SUCCESS: Plugin configuration applied.")
+                      print("SUCCESS: Configuration applied.")
                       cfnresponse.send(event, context, cfnresponse.SUCCESS, {"Status": "Success"})
                       return
                   except Exception as e:
                       last_error = str(e)
-                      print(f"Attempt {attempts + 1} failed: {last_error}")
+                      print(f"Update failed: {last_error}")
                       attempts += 1
-                      time.sleep(30)
+                      time.sleep(45)
               
-              cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": f"Failed after 5 retries. Last error: {last_error}"})
+              cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": f"Final error: {last_error}"})
 
   # 4. The Custom Resource
   GrafanaPluginInstallation:
