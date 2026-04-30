@@ -1,8 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Grafana Workspace with Custom Resource (Self-Contained Policies)
+Description: Grafana Workspace with Custom Resource (Plugin Retry Logic)
 
 Resources:
-  # 1. IAM Role (Completely Custom Inline Policy - No Managed ARNs)
+  # 1. IAM Role (Self-Contained)
   GrafanaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -21,13 +21,11 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              # Custom Resource Permissions
               - Effect: Allow
                 Action:
                   - grafana:UpdateWorkspaceConfiguration
                   - grafana:DescribeWorkspace
                 Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:/workspaces/*'
-              # Standard Grafana Data Source Permissions (Prometheus/CW/Xray)
               - Effect: Allow
                 Action:
                   - aps:*
@@ -40,7 +38,6 @@ Resources:
                   - logs:Get*
                   - logs:List*
                 Resource: '*'
-              # Lambda Function Logging
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
@@ -58,24 +55,36 @@ Resources:
       RoleArn: !GetAtt GrafanaRole.Arn
       GrafanaVersion: '10.4'
 
-  # 3. Lambda Function to install plugins
+  # 3. Lambda Function (Now with Retries & Delay)
   PluginInstallerFunction:
     Type: AWS::Lambda::Function
     Properties:
       Handler: index.handler
       Role: !GetAtt GrafanaRole.Arn
       Runtime: python3.9
-      Timeout: 60
+      Timeout: 300
       Code:
         ZipFile: |
           import boto3
           import json
           import cfnresponse
+          import time
+
           def handler(event, context):
-              client = boto3.client('grafana')
+              client = boto3.client('grafana', region_name='us-east-1')
               workspace_id = event['ResourceProperties']['WorkspaceId']
-              try:
-                  if event['RequestType'] in ['Create', 'Update']:
+              
+              if event['RequestType'] == 'Delete':
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                  return
+
+              # Wait 30 seconds for the Workspace API to settle
+              time.sleep(30)
+              
+              attempts = 0
+              max_attempts = 5
+              while attempts < max_attempts:
+                  try:
                       client.update_workspace_configuration(
                           workspaceId=workspace_id,
                           configuration=json.dumps({
@@ -84,10 +93,14 @@ Resources:
                               }
                           })
                       )
-                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {"Status": "Success"})
-              except Exception as e:
-                  print(f"Error: {str(e)}")
-                  cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": str(e)})
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {"Status": "Success"})
+                      return
+                  except Exception as e:
+                      attempts += 1
+                      print(f"Attempt {attempts} failed: {str(e)}")
+                      time.sleep(20)
+              
+              cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": "Grafana API not ready after 5 retries"})
 
   # 4. The Custom Resource
   GrafanaPluginInstallation:
