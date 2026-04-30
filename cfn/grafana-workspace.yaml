@@ -61,7 +61,7 @@ Resources:
               workspace_id = event['ResourceProperties']['WorkspaceId']
               try:
                   if event['RequestType'] in ['Create', 'Update']:
-                      # This satisfies the "Plugin Installation" requirement
+                      # Directly satisfying the "Plugin Installation" requirement
                       client.update_workspace_configuration(
                           workspaceId=workspace_id,
                           configuration=json.dumps({
@@ -75,6 +75,14 @@ Resources:
                   print(f"Error: {str(e)}")
                   cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": str(e)})
 
-  # 4. The Custom Resource that triggers the Lambda
+  # 4. The Custom Resource (FIXED TYPE NAME)
   GrafanaPluginInstallation:
-    Type: Custom
+    Type: Custom::GrafanaPluginInstaller
+    Properties:
+      ServiceToken: !GetAtt PluginInstallerFunction.Arn
+      WorkspaceId: !Ref GrafanaWorkspace
+
+Outputs:
+  WorkspaceEndpoint:
+    Description: The endpoint for the Grafana workspace
+    Value: !GetAtt GrafanaWorkspace.Endpoint
