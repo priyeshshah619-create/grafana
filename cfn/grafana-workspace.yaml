@@ -110,3 +110,7 @@ Resources:
       Plugins:
         - grafana-clock-panel
         - grafana-piechart-panel
+
+Outputs:
+  GrafanaEndpoint:
+    Value: !GetAtt GrafanaWorkspace.Endpoint
