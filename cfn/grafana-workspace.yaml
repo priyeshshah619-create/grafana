@@ -1,11 +1,11 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: AWS Managed Grafana 10.4 – SSO + Automated Plugin Installation (V12 Final)
+Description: AWS Managed Grafana 10.4 – SSO + Automated Plugin Installation (V13)
 
 Resources:
   GrafanaServiceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaServiceRole-${AWS::StackName}-V12'
+      RoleName: !Sub 'GrafanaServiceRole-${AWS::StackName}-V13'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -24,7 +24,6 @@ Resources:
       PermissionType: SERVICE_MANAGED
       RoleArn: !GetAtt GrafanaServiceRole.Arn
       GrafanaVersion: '10.4'
-      # Correct property name for the CloudFormation Resource
       WorkspaceConfiguration: |
         {
           "plugins": {
@@ -35,7 +34,7 @@ Resources:
   PluginLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaPluginLambdaRole-${AWS::StackName}-V12'
+      RoleName: !Sub 'GrafanaPluginLambdaRole-${AWS::StackName}-V13'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -60,7 +59,7 @@ Resources:
   PluginInstallerLambda:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub '${AWS::StackName}-FinalFix-V12'
+      FunctionName: !Sub '${AWS::StackName}-FinalFix-V13'
       Runtime: python3.9
       Handler: index.handler
       Timeout: 300
@@ -88,7 +87,7 @@ Resources:
                       if not endpoint.startswith('http'):
                           endpoint = f"https://{endpoint}"
                       key_res = client.create_workspace_api_key(
-                          workspaceId=wid, keyName='plugin-installer-v12',
+                          workspaceId=wid, keyName='plugin-installer-v13',
                           keyRole='ADMIN', secondsToLive=600
                       )
                       key = key_res['key']
@@ -97,12 +96,12 @@ Resources:
                       for p in plugins:
                           url = f"{endpoint}/api/plugins/{p}/install"
                           http.request("POST", url, headers=headers)
-                      client.delete_workspace_api_key(workspaceId=wid, keyName='plugin-installer-v12')
+                      client.delete_workspace_api_key(workspaceId=wid, keyId=key_res['id'])
                   send(event, context, "SUCCESS")
               except Exception as e:
                   send(event, context, "FAILED", str(e))
 
-  PluginTriggerV12:
+  PluginTriggerV13:
     Type: Custom::GrafanaPluginInstall
     DependsOn: GrafanaWorkspace
     Properties:
@@ -111,7 +110,3 @@ Resources:
       Plugins:
         - grafana-clock-panel
         - grafana-piechart-panel
-
-Outputs:
-  GrafanaEndpoint:
-    Value: !GetAtt GrafanaWorkspace.Endpoint
