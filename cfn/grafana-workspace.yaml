@@ -86,3 +86,4 @@ Outputs:
   GrafanaEndpoint:
     Description: The endpoint of the Grafana workspace
     Value: !GetAtt GrafanaWorkspace.Endpoint
+ 
