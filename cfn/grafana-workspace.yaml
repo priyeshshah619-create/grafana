@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Grafana Workspace with Custom Resource (Reviewer-Ready)
 
 Resources:
-  # 1. IAM Role (Scoped to allow Lambda + Grafana actions)
+  # 1. IAM Role (Using standard Managed Policies for better compatibility)
   GrafanaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -17,9 +17,9 @@ Resources:
                 - lambda.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
+        - arn:iam::aws:policy/service-role/AWSGrafanaWorkspaceRole
         - arn:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:iam::aws:policy/AmazonPrometheusFullAccess
-        - arn:iam::aws:policy/AWSXrayReadOnlyAccess
       Policies:
         - PolicyName: GrafanaCustomResourcePolicy
           PolicyDocument:
@@ -29,7 +29,7 @@ Resources:
                 Action:
                   - grafana:UpdateWorkspaceConfiguration
                   - grafana:DescribeWorkspace
-                # Wildcard breaks the circular dependency with the Workspace resource
+                # Wildcard breaks circular dependency
                 Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:/workspaces/*'
               - Effect: Allow
                 Action:
@@ -89,4 +89,5 @@ Resources:
 Outputs:
   WorkspaceEndpoint:
     Description: The endpoint for the Grafana workspace
-    Value: !GetAtt GrafanaWorkspace.Endpoint
+    Value: !GetAtt GrafanaWorkspace.Endpointcheck code now ?
+    
