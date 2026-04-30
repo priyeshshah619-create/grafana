@@ -26,13 +26,26 @@ jobs:
             --stack-name grafana-workspace-stack \
             --capabilities CAPABILITY_NAMED_IAM
 
+      - name: Get Grafana URL
+        id: get_url
+        run: |
+          # Fetch the endpoint from CloudFormation Outputs
+          RAW_URL=$(aws cloudformation describe-stacks \
+            --stack-name grafana-workspace-stack \
+            --query "Stacks[0].Outputs[?OutputKey=='WorkspaceEndpoint'].OutputValue" \
+            --output text)
+          
+          # Clean the URL (remove https:// if present to avoid doubles)
+          CLEAN_URL=$(echo $RAW_URL | sed 's|https://||g')
+          echo "GRAFANA_URL=https://$CLEAN_URL" >> $GITHUB_ENV
+
       - name: Push Grafana Data Source
         run: |
           curl -X POST \
           -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
           -H "Content-Type: application/json" \
           -d @datasource.json \
-          https://g-a07f04a423.grafana-workspace.us-east-1.amazonaws.com/api/datasources
+          ${{ env.GRAFANA_URL }}/api/datasources
 
       - name: Push Grafana Dashboard
         run: |
@@ -40,7 +53,7 @@ jobs:
           -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
           -H "Content-Type: application/json" \
           -d @dashboard.json \
-          https://g-a07f04a423.grafana-workspace.us-east-1.amazonaws.com/api/dashboards/db
+          ${{ env.GRAFANA_URL }}/api/dashboards/db
 
       - name: Push Grafana Alerts
         run: |
@@ -48,4 +61,4 @@ jobs:
           -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
           -H "Content-Type: application/json" \
           -d @alert.json \
-          https://g-a07f04a423.grafana-workspace.us-east-1.amazonaws.com/api/v1/provisioning/alert-rules
+          ${{ env.GRAFANA_URL }}/api/v1/provisioning/alert-rules
