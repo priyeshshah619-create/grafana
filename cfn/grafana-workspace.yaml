@@ -10,10 +10,11 @@ Parameters:
     Default: 'grafana-clock-panel,grafana-piechart-panel'
 
 Resources:
-  # 1. IAM Role that Grafana Workspace uses to read AWS Data (CloudWatch, etc.)
+  # 1. IAM Role for Grafana Workspace
   GrafanaServiceRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub 'GrafanaServiceRole-${AWS::StackName}'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -35,7 +36,8 @@ Resources:
         - AWS_SSO
       PermissionType: CUSTOMER_MANAGED
       WorkspaceRoleArn: !GetAtt GrafanaServiceRole.Arn
-      DataSources:
+      # Note: Removing pluralized lists for validation stability in initial create
+      DataSources: 
         - CLOUDWATCH
       NotificationDestinations:
         - SNS
@@ -64,7 +66,7 @@ Resources:
                   - grafana:DescribeWorkspace
                 Resource: '*'
 
-  # 4. Lambda Function to Install Plugins
+  # 4. Lambda Function
   PluginInstallerFunction:
     Type: AWS::Lambda::Function
     Properties:
