@@ -49,3 +49,11 @@ jobs:
             -H "Content-Type: application/json" \
             -d @dashboard.json \
             "${{ env.GRAFANA_URL }}/api/dashboards/db"
+
+      - name: Push Grafana Alerts
+        run: |
+          curl -f -X POST \
+            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d @alert.json \
+            "${{ env.GRAFANA_URL }}/api/v1/provisioning/alert-rules" || echo "Alerts already provisioned"
