@@ -5,7 +5,7 @@ Resources:
   GrafanaAlertsTopic:
     Type: AWS::SNS::Topic
     Properties:
-      TopicName: grafana-alerts
+      TopicName: Health-Alerts-Topic
 
   GrafanaAlertsTopicPolicy:
     Type: AWS::SNS::TopicPolicy
@@ -17,12 +17,12 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service: cloudwatch.amazonaws.com
+              Service: grafana.amazonaws.com
             Action: sns:Publish
             Resource: !Ref GrafanaAlertsTopic
           - Effect: Allow
             Principal:
-              Service: events.amazonaws.com
+              Service: cloudwatch.amazonaws.com
             Action: sns:Publish
             Resource: !Ref GrafanaAlertsTopic
 
