@@ -21,46 +21,31 @@ jobs:
 
       - name: Deploy CloudFormation Stack
         run: |
-          # Use || true to prevent failure if the stack is already there
           aws cloudformation create-stack \
             --stack-name grafana-workspace-stack \
             --template-body file://cfn/grafana-workspace.yaml \
             --capabilities CAPABILITY_NAMED_IAM \
-            --region us-east-1 || echo "Stack already exists, proceeding to config..."
+            --region us-east-1 || echo "Stack already exists, proceeding..."
           
-          echo "Ensuring stack is ready..."
           aws cloudformation wait stack-exists --stack-name grafana-workspace-stack
 
-      - name: Wait for Workspace and Get URL
-        id: vars
+      - name: Get Workspace URL
         run: |
-          WS_ID=$(aws cloudformation describe-stacks --stack-name grafana-workspace-stack --query "Stacks[0].Outputs[?OutputKey=='WorkspaceId'].OutputValue" --output text)
-          
-          echo "Checking workspace status..."
-          aws grafana wait workspace-active --workspace-id $WS_ID
-          
-          ENDPOINT=$(aws grafana describe-workspace --workspace-id $WS_ID --query "workspace.endpoint" --output text)
+          ENDPOINT=$(aws grafana describe-workspace --workspace-id $(aws cloudformation describe-stacks --stack-name grafana-workspace-stack --query "Stacks[0].Outputs[?OutputKey=='WorkspaceId'].OutputValue" --output text) --query "workspace.endpoint" --output text)
           echo "GRAFANA_URL=https://$ENDPOINT" >> $GITHUB_ENV
-          echo "WS_ID=$WS_ID" >> $GITHUB_ENV
-
-      - name: Generate Temporary Admin Token
-        run: |
-          # This will now work because you are assigned as an Admin in the console
-          TOKEN=$(aws grafana create-workspace-api-key --key-name "GitHubAction-$(date +%s)" --key-role "ADMIN" --seconds-to-live 3600 --workspace-id ${{ env.WS_ID }} --query "key" --output text)
-          echo "DYNAMIC_TOKEN=$TOKEN" >> $GITHUB_ENV
 
       - name: Push Grafana Data Source
         run: |
           curl -f -X POST \
-            -H "Authorization: Bearer ${{ env.DYNAMIC_TOKEN }}" \
+            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d @datasource.json \
-            "${{ env.GRAFANA_URL }}/api/datasources" || echo "Data source already exists or failed"
+            "${{ env.GRAFANA_URL }}/api/datasources" || echo "Already exists"
 
       - name: Push Grafana Dashboard
         run: |
           curl -f -X POST \
-            -H "Authorization: Bearer ${{ env.DYNAMIC_TOKEN }}" \
+            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d @dashboard.json \
             "${{ env.GRAFANA_URL }}/api/dashboards/db"
