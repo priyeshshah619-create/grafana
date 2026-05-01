@@ -14,14 +14,14 @@
           "data": [
             {
               "refId": "A",
-              "relativeTimeRange": { "from": 300, "to": 0 },
-              "datasourceUid": "afkhffj6j0n40c",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0
+              },
+              "datasourceUid": "grafana-cloudwatch-datasource",
               "model": {
                 "namespace": "AWS/SNS",
                 "metricName": "NumberOfNotificationsFailed",
-                "expression": "",
-                "id": "",
-                "matchExact": true,
                 "period": "300",
                 "refId": "A",
                 "region": "us-east-1",
@@ -47,8 +47,13 @@
                 "refId": "C",
                 "conditions": [
                   {
-                    "evaluator": { "type": "gt", "params": [0] },
-                    "operator": { "type": "and" }
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [0]
+                    },
+                    "operator": {
+                      "type": "and"
+                    }
                   }
                 ]
               }
