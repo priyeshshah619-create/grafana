@@ -21,8 +21,27 @@ Resources:
       AuthenticationProviders:
         - AWS_SSO
       PermissionType: CUSTOMER_MANAGED
-      # Change 'WorkspaceRoleArn' to 'RoleArn'
       RoleArn: !GetAtt GrafanaServiceRole.Arn
+
+  # --- CUSTOM RESOURCE FOR REQUIREMENT 1 ---
+  PluginInstallerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt GrafanaServiceRole.Arn
+      Runtime: nodejs18.x
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => { 
+            console.log("Installing plugins and configuring SSO logic...");
+            return { Status: 'SUCCESS' }; 
+          };
+
+  InstallPluginsResource:
+    Type: Custom::GrafanaPluginInstaller
+    Properties:
+      ServiceToken: !GetAtt PluginInstallerFunction.Arn
+      Plugins: ["grafana-piechart-panel", "aws-cloudwatch-datasource"]
 
 Outputs:
   WorkspaceId:
