@@ -2,20 +2,17 @@
   "dashboard": {
     "id": null,
     "title": "AWS Infrastructure Health",
+    "tags": ["aws", "sns"],
     "timezone": "browser",
-    "schemaVersion": 38,
-    "uid": "aws-health-dashboard",
-    "version": 1,
     "panels": [
       {
         "id": 1,
         "type": "timeseries",
         "title": "SNS Messages Published",
         "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-        "datasource": { "type": "cloudwatch", "uid": "afkhffj6j0n40c" },
+        "datasource": { "type": "cloudwatch", "uid": "grafana-cloudwatch-datasource" },
         "targets": [
           {
-            "datasource": { "type": "cloudwatch", "uid": "afkhffj6j0n40c" },
             "namespace": "AWS/SNS",
             "metricName": "NumberOfMessagesPublished",
             "region": "us-east-1",
@@ -30,10 +27,9 @@
         "type": "timeseries",
         "title": "SNS Messages Failed",
         "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-        "datasource": { "type": "cloudwatch", "uid": "afkhffj6j0n40c" },
+        "datasource": { "type": "cloudwatch", "uid": "grafana-cloudwatch-datasource" },
         "targets": [
           {
-            "datasource": { "type": "cloudwatch", "uid": "afkhffj6j0n40c" },
             "namespace": "AWS/SNS",
             "metricName": "NumberOfMessagesFailed",
             "region": "us-east-1",
@@ -48,10 +44,9 @@
         "type": "gauge",
         "title": "Total SNS Success Rate",
         "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
-        "datasource": { "type": "cloudwatch", "uid": "afkhffj6j0n40c" },
+        "datasource": { "type": "cloudwatch", "uid": "grafana-cloudwatch-datasource" },
         "targets": [
           {
-            "datasource": { "type": "cloudwatch", "uid": "afkhffj6j0n40c" },
             "namespace": "AWS/SNS",
             "metricName": "NumberOfNotificationsFailed",
             "region": "us-east-1",
@@ -67,7 +62,7 @@
             "thresholds": {
               "mode": "absolute",
               "steps": [
-                { "color": "green", "value": null },
+                { "color": "green", "value": 0 },
                 { "color": "red", "value": 1 }
               ]
             }
