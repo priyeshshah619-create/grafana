@@ -46,7 +46,7 @@ Resources:
                 Action:
                   - grafana:UpdateWorkspace
                   - grafana:DescribeWorkspace
-                Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:/workspaces/${GrafanaWorkspace.Id}'
+                Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:/workspaces/*'
 
   # 3. Lambda Function to Install Plugins
   PluginInstallerFunction:
@@ -60,19 +60,21 @@ Resources:
         ZipFile: |
           import boto3
           import cfnresponse
+          import json
           def handler(event, context):
               grafana = boto3.client('grafana')
               workspace_id = event['ResourceProperties']['WorkspaceId']
               plugins = event['ResourceProperties']['Plugins']
               try:
                   if event['RequestType'] in ['Create', 'Update']:
+                      print(f"Updating workspace {workspace_id} with plugins {plugins}")
                       grafana.update_workspace(
                           workspaceId=workspace_id,
                           configuration={'plugins': plugins}
                       )
                   cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
               except Exception as e:
-                  print(e)
+                  print(str(e))
                   cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": str(e)})
 
   # 4. Custom Resource Trigger
@@ -85,4 +87,6 @@ Resources:
 
 Outputs:
   WorkspaceId:
-    Value: !GetAtt
+    Value: !GetAtt GrafanaWorkspace.Id
+  WorkspaceEndpoint:
+    Value: !GetAtt GrafanaWorkspace.Endpoint
