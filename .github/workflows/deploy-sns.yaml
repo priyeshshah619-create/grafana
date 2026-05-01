@@ -27,29 +27,36 @@ jobs:
             --capabilities CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset
 
-      - name: Get Grafana URL
-        id: get_url
+      - name: Wait for Workspace and Get URL
+        id: vars
         run: |
-          RAW_URL=$(aws cloudformation describe-stacks \
-            --stack-name grafana-workspace-stack \
-            --query "Stacks[0].Outputs[?OutputKey=='WorkspaceEndpoint'].OutputValue" \
-            --output text)
-          # Strips https:// to ensure the curl command doesn't have double prefixes
-          CLEAN_URL=$(echo $RAW_URL | sed 's|https://||g')
-          echo "GRAFANA_URL=https://$CLEAN_URL" >> $GITHUB_ENV
+          WS_ID=$(aws cloudformation describe-stacks --stack-name grafana-workspace-stack --query "Stacks[0].Outputs[?OutputKey=='WorkspaceId'].OutputValue" --output text)
+          
+          echo "Waiting for workspace to be ACTIVE..."
+          aws grafana wait workspace-active --workspace-id $WS_ID
+          
+          ENDPOINT=$(aws grafana describe-workspace --workspace-id $WS_ID --query "workspace.endpoint" --output text)
+          echo "GRAFANA_URL=https://$ENDPOINT" >> $GITHUB_ENV
+          echo "WS_ID=$WS_ID" >> $GITHUB_ENV
+
+      - name: Generate Temporary Admin Token
+        run: |
+          # Creates a service account and token on the fly for automation
+          TOKEN=$(aws grafana create-workspace-api-key --key-name "GitHubAction-$(date +%s)" --key-role "ADMIN" --seconds-to-live 3600 --workspace-id ${{ env.WS_ID }} --query "key" --output text)
+          echo "DYNAMIC_TOKEN=$TOKEN" >> $GITHUB_ENV
 
       - name: Push Grafana Data Source
         run: |
           curl -f -X POST \
-            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+            -H "Authorization: Bearer ${{ env.DYNAMIC_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d @datasource.json \
-            "${{ env.GRAFANA_URL }}/api/datasources" || echo "Data source already exists or failed silently"
+            "${{ env.GRAFANA_URL }}/api/datasources" || echo "Data source configuration skipped"
 
       - name: Push Grafana Dashboard
         run: |
           curl -f -X POST \
-            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+            -H "Authorization: Bearer ${{ env.DYNAMIC_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d @dashboard.json \
             "${{ env.GRAFANA_URL }}/api/dashboards/db"
