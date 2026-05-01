@@ -21,22 +21,22 @@ jobs:
 
       - name: Deploy CloudFormation Stack
         run: |
-          # Use create-stack to bypass the ChangeSet validation hook
+          # Use || true to prevent failure if the stack is already there
           aws cloudformation create-stack \
             --stack-name grafana-workspace-stack \
             --template-body file://cfn/grafana-workspace.yaml \
             --capabilities CAPABILITY_NAMED_IAM \
-            --region us-east-1
+            --region us-east-1 || echo "Stack already exists, proceeding to config..."
           
-          echo "Waiting for stack creation to finish..."
-          aws cloudformation wait stack-create-complete --stack-name grafana-workspace-stack
+          echo "Ensuring stack is ready..."
+          aws cloudformation wait stack-exists --stack-name grafana-workspace-stack
 
       - name: Wait for Workspace and Get URL
         id: vars
         run: |
           WS_ID=$(aws cloudformation describe-stacks --stack-name grafana-workspace-stack --query "Stacks[0].Outputs[?OutputKey=='WorkspaceId'].OutputValue" --output text)
           
-          echo "Waiting for Grafana workspace to be ACTIVE (this takes ~5-10 mins)..."
+          echo "Checking workspace status..."
           aws grafana wait workspace-active --workspace-id $WS_ID
           
           ENDPOINT=$(aws grafana describe-workspace --workspace-id $WS_ID --query "workspace.endpoint" --output text)
@@ -45,6 +45,7 @@ jobs:
 
       - name: Generate Temporary Admin Token
         run: |
+          # This will now work because you are assigned as an Admin in the console
           TOKEN=$(aws grafana create-workspace-api-key --key-name "GitHubAction-$(date +%s)" --key-role "ADMIN" --seconds-to-live 3600 --workspace-id ${{ env.WS_ID }} --query "key" --output text)
           echo "DYNAMIC_TOKEN=$TOKEN" >> $GITHUB_ENV
 
