@@ -1,7 +1,7 @@
 {
   "name": "CloudWatch",
   "type": "cloudwatch",
-  "uid": "afkhffj6j0n40c",
+  "uid": "grafana-cloudwatch-datasource",
   "access": "proxy",
   "jsonData": {
     "authType": "workspace_iam_role",
