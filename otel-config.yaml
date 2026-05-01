@@ -1,4 +1,4 @@
-# OpenTelemetry Collector Configuration for App Monitoring
+# OpenTelemetry Collector Configuration
 # Satisfies Assessment Requirement 6 & 7
 receivers:
   otlp:
@@ -18,13 +18,6 @@ exporters:
     log_group_name: "/aws/app/grafana-observability"
     log_stream_name: "otel-metrics"
     region: "us-east-1"
-  
-  # Exporting to AWS Managed Prometheus (Optional high-scale standard)
-  awsprometheusremotewrite:
-    endpoint: "https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-xxx/api/v1/remote_write"
-    aws_auth:
-      region: "us-east-1"
-      service: "aps"
 
 service:
   pipelines:
