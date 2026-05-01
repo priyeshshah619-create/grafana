@@ -1,17 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'AWS Managed Grafana - Minimalist Deployment'
-
-Parameters:
-  WorkspaceName:
-    Type: String
-    Default: 'Observability-Workspace'
-
 Resources:
-  # 1. IAM Role for Grafana
   GrafanaServiceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'GrafanaServiceRole-${AWS::StackName}'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -22,11 +13,10 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonGrafanaCloudWatchAccess
 
-  # 2. The Managed Grafana Workspace
   GrafanaWorkspace:
     Type: AWS::Grafana::Workspace
     Properties:
-      Name: !Ref WorkspaceName
+      Name: Observability-Workspace
       AccountAccessType: CURRENT_ACCOUNT
       AuthenticationProviders:
         - AWS_SSO
@@ -36,5 +26,3 @@ Resources:
 Outputs:
   WorkspaceId:
     Value: !GetAtt GrafanaWorkspace.Id
-  WorkspaceEndpoint:
-    Value: !GetAtt GrafanaWorkspace.Endpoint
