@@ -6,9 +6,9 @@ Resources:
     Type: AWS::Grafana::Workspace
     Properties:
       AccountAccessType: CURRENT_ACCOUNT
+      PermissionType: SERVICE_MANAGED
       AuthenticationProviders:
         - AWS_SSO
-      PermissionType: SERVICE_MANAGED
       Name: grafana-workspace-automation
 
   # IAM Role for the Lambda Function
@@ -78,7 +78,7 @@ Resources:
 Outputs:
   WorkspaceId:
     Description: "The ID of the Grafana Workspace"
-    Value: !GetAtt GrafanaWorkspace.Id
+    Value: !Ref GrafanaWorkspace
   WorkspaceEndpoint:
     Description: "The Endpoint of the Grafana Workspace"
     Value: !GetAtt GrafanaWorkspace.Endpoint
