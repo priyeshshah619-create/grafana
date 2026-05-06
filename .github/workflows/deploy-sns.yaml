@@ -1,84 +1,63 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: 'AWS Managed Grafana with Custom Resource Plugin Installer'
+name: Deploy Grafana Workspace
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
-Resources:
-  GrafanaWorkspace:
-    Type: AWS::Grafana::Workspace
-    Properties:
-      AccountAccessType: CURRENT_ACCOUNT
-      AuthenticationProviders:
-        - AWS_SSO
-      PermissionType: SERVICE_MANAGED
-      Name: grafana-workspace-automation
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  # IAM Role for the Lambda Function
-  LambdaExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - lambda.amazonaws.com
-            Action:
-              - sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: GrafanaPluginAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - grafana:UpdateWorkspace
-                  - grafana:DescribeWorkspace
-                Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:/workspaces/*'
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
-  # Lambda Function to Install Plugins
-  PluginInstallerFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      Handler: index.handler
-      Runtime: python3.9
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 300
-      Code:
-        ZipFile: |
-          import boto3
-          import cfnresponse
+      - name: Deploy Grafana Infrastructure (CloudFormation)
+        # Using 'deploy' instead of 'create-stack' ensures the Lambda logic 
+        # inside the template is updated and triggered on every push.
+        run: |
+          aws cloudformation deploy \
+            --stack-name grafana-workspace-stack \
+            --template-file cfn/grafana-workspace.yaml \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset
 
-          def handler(event, context):
-              grafana = boto3.client('grafana')
-              workspace_id = event['ResourceProperties']['WorkspaceId']
-              plugins = event['ResourceProperties']['Plugins']
-              
-              try:
-                  if event['RequestType'] in ['Create', 'Update']:
-                      grafana.update_workspace(
-                          workspaceId=workspace_id,
-                          configuration={'plugins': plugins}
-                      )
-                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
-              except Exception as e:
-                  print(e)
-                  cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
+      - name: Get Workspace URL
+        run: |
+          WORKSPACE_ID=$(aws cloudformation describe-stacks --stack-name grafana-workspace-stack --query "Stacks[0].Outputs[?OutputKey=='WorkspaceId'].OutputValue" --output text)
+          ENDPOINT=$(aws grafana describe-workspace --workspace-id $WORKSPACE_ID --query "workspace.endpoint" --output text)
+          echo "GRAFANA_URL=https://$ENDPOINT" >> $GITHUB_ENV
 
-  # Custom Resource Trigger
-  InstallPluginsResource:
-    Type: Custom::GrafanaPluginInstaller
-    Properties:
-      ServiceToken: !GetAtt PluginInstallerFunction.Arn
-      WorkspaceId: !Ref GrafanaWorkspace
-      Plugins: 
-        - grafana-piechart-panel
+      - name: Push Grafana Data Source
+        run: |
+          curl -f -X POST \
+            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            -d @datasource.json \
+            "${{ env.GRAFANA_URL }}/api/datasources" || echo "Data source already exists or updated"
 
-Outputs:
-  WorkspaceId:
-    Description: "The ID of the Grafana Workspace"
-    Value: !GetAtt GrafanaWorkspace.Id
-  WorkspaceEndpoint:
-    Description: "The Endpoint of the Grafana Workspace"
-    Value: !GetAtt GrafanaWorkspace.Endpoint
+      - name: Push Grafana Dashboard
+        run: |
+          curl -f -X POST \
+            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            -d @dashboard.json \
+            "${{ env.GRAFANA_URL }}/api/dashboards/db"
+
+      - name: Push Grafana Alerts
+        run: |
+          curl -f -X POST \
+            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            -d @alert.json \
+            "${{ env.GRAFANA_URL }}/api/v1/provisioning/alert-rules" || echo "Alerts already provisioned"
