@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: 'AWS Managed Grafana with Custom Resource Plugin Installer'
 
 Resources:
-  # 1. Manually creating the Service Role to bypass the 400 error
+  # 1. Manual Service Role to bypass 400 error
   GrafanaServiceRole:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -16,7 +16,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSGrafanaCloudWatchAccess
 
-  # 2. Workspace using the created Role (Bypasses auto-generation issues)
+  # 2. Workspace using the created Role
   GrafanaWorkspace:
     Type: 'AWS::Grafana::Workspace'
     Properties:
@@ -51,7 +51,7 @@ Resources:
                   - grafana:DescribeWorkspace
                 Resource: '*'
 
-  # 4. Plugin Installer Lambda (Fixed Clean Indentation)
+  # 4. Plugin Installer Lambda (Fixed Syntax)
   PluginInstallerFunction:
     Type: 'AWS::Lambda::Function'
     Properties:
