@@ -7,6 +7,8 @@ Resources:
     Properties:
       AccountAccessType: CURRENT_ACCOUNT
       PermissionType: SERVICE_MANAGED
+      DataSources:
+        - CLOUDWATCH
       AuthenticationProviders:
         - AWS_SSO
       Name: grafana-workspace-automation
