@@ -1,7 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'AWS Managed Grafana with Custom Resource Plugin Installer'
+Description: 'AWS Managed Grafana - Assessment Version'
 
 Resources:
+  # 1. Workspace Role
   GrafanaServiceRole:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -15,16 +16,18 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSGrafanaCloudWatchAccess
 
+  # 2. Grafana Workspace (Fixed property to RoleArn)
   GrafanaWorkspace:
     Type: 'AWS::Grafana::Workspace'
     Properties:
       AccountAccessType: CURRENT_ACCOUNT
-      PermissionType: CUSTOMER_MANAGED
-      WorkspaceRoleArn: !GetAtt GrafanaServiceRole.Arn
       AuthenticationProviders:
         - AWS_SSO
-      Name: grafana-workspace-automation
+      PermissionType: CUSTOMER_MANAGED
+      RoleArn: !GetAtt GrafanaServiceRole.Arn
+      Name: grafana-assessment-workspace
 
+  # 3. Lambda Role
   LambdaExecutionRole:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -38,45 +41,47 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: GrafanaPluginAccess
+        - PolicyName: GrafanaPluginPolicy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action:
-                  - grafana:UpdateWorkspace
-                  - grafana:DescribeWorkspace
-                Resource: '*'
+                  - grafana:UpdateWorkspaceConfiguration
+                Resource: "*"
 
+  # 4. Plugin Admin Enabler (Simplified for assessment)
   PluginInstallerFunction:
     Type: 'AWS::Lambda::Function'
     Properties:
-      Handler: index.handler
       Runtime: python3.9
+      Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 300
+      Timeout: 60
       Code:
         ZipFile: |
-          import boto3, cfnresponse
+          import json, boto3, urllib3
+          http = urllib3.PoolManager()
+          def send(event, context, status, data):
+            body = json.dumps({'Status': status, 'Reason': 'See Logs', 'PhysicalResourceId': context.log_stream_name, 'StackId': event['StackId'], 'RequestId': event['RequestId'], 'LogicalResourceId': event['LogicalResourceId'], 'Data': data})
+            http.request('PUT', event['ResponseURL'], body=body)
           def handler(event, context):
-            client = boto3.client('grafana')
             try:
               if event['RequestType'] in ['Create', 'Update']:
-                client.update_workspace(
+                boto3.client('grafana').update_workspace_configuration(
                   workspaceId=event['ResourceProperties']['WorkspaceId'],
-                  configuration={'plugins': event['ResourceProperties']['Plugins']}
+                  configuration=json.dumps({"plugins": {"pluginAdminEnabled": True}})
                 )
-              cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+              send(event, context, "SUCCESS", {})
             except Exception as e:
-              print(e); cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": str(e)})
+              print(e); send(event, context, "FAILED", {"Message": str(e)})
 
-  InstallPlugins:
-    Type: 'Custom::GrafanaPluginInstaller'
+  # 5. Custom Resource Trigger
+  EnablePlugins:
+    Type: 'Custom::GrafanaPluginEnabler'
     Properties:
       ServiceToken: !GetAtt PluginInstallerFunction.Arn
       WorkspaceId: !Ref GrafanaWorkspace
-      Plugins:
-        - "grafana-piechart-panel"
 
 Outputs:
   WorkspaceId:
