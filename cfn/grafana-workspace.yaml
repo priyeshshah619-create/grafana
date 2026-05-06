@@ -3,7 +3,7 @@ Description: 'AWS Managed Grafana with Custom Resource Plugin Installer'
 
 Resources:
   GrafanaWorkspace:
-    Type: AWS::Grafana::Workspace
+    Type: 'AWS::Grafana::Workspace'
     Properties:
       AccountAccessType: CURRENT_ACCOUNT
       PermissionType: SERVICE_MANAGED
@@ -13,9 +13,8 @@ Resources:
         - AWS_SSO
       Name: grafana-workspace-automation
 
-  # IAM Role for the Lambda Function
   LambdaExecutionRole:
-    Type: AWS::IAM::Role
+    Type: 'AWS::IAM::Role'
     Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -27,7 +26,7 @@ Resources:
             Action:
               - sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
       Policies:
         - PolicyName: GrafanaPluginAccess
           PolicyDocument:
@@ -39,9 +38,8 @@ Resources:
                   - grafana:DescribeWorkspace
                 Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:/workspaces/*'
 
-  # Lambda Function to Install Plugins
   PluginInstallerFunction:
-    Type: AWS::Lambda::Function
+    Type: 'AWS::Lambda::Function'
     Properties:
       Handler: index.handler
       Runtime: python3.9
@@ -51,12 +49,10 @@ Resources:
         ZipFile: |
           import boto3
           import cfnresponse
-
           def handler(event, context):
               grafana = boto3.client('grafana')
               workspace_id = event['ResourceProperties']['WorkspaceId']
               plugins = event['ResourceProperties']['Plugins']
-              
               try:
                   if event['RequestType'] in ['Create', 'Update']:
                       grafana.update_workspace(
@@ -68,9 +64,8 @@ Resources:
                   print(e)
                   cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
 
-  # Custom Resource Trigger
   InstallPluginsResource:
-    Type: Custom::GrafanaPluginInstaller
+    Type: 'Custom::GrafanaPluginInstaller'
     Properties:
       ServiceToken: !GetAtt PluginInstallerFunction.Arn
       WorkspaceId: !Ref GrafanaWorkspace
