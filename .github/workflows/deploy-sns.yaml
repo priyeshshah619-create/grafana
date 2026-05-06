@@ -19,19 +19,20 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      - name: Deploy CloudFormation Stack
+      - name: Deploy Grafana Infrastructure (CloudFormation)
+        # Using 'deploy' instead of 'create-stack' ensures the Lambda logic 
+        # inside the template is updated and triggered on every push.
         run: |
-          aws cloudformation create-stack \
+          aws cloudformation deploy \
             --stack-name grafana-workspace-stack \
-            --template-body file://cfn/grafana-workspace.yaml \
+            --template-file cfn/grafana-workspace.yaml \
             --capabilities CAPABILITY_NAMED_IAM \
-            --region us-east-1 || echo "Stack already exists, proceeding..."
-          
-          aws cloudformation wait stack-exists --stack-name grafana-workspace-stack
+            --no-fail-on-empty-changeset
 
       - name: Get Workspace URL
         run: |
-          ENDPOINT=$(aws grafana describe-workspace --workspace-id $(aws cloudformation describe-stacks --stack-name grafana-workspace-stack --query "Stacks[0].Outputs[?OutputKey=='WorkspaceId'].OutputValue" --output text) --query "workspace.endpoint" --output text)
+          WORKSPACE_ID=$(aws cloudformation describe-stacks --stack-name grafana-workspace-stack --query "Stacks[0].Outputs[?OutputKey=='WorkspaceId'].OutputValue" --output text)
+          ENDPOINT=$(aws grafana describe-workspace --workspace-id $WORKSPACE_ID --query "workspace.endpoint" --output text)
           echo "GRAFANA_URL=https://$ENDPOINT" >> $GITHUB_ENV
 
       - name: Push Grafana Data Source
@@ -39,14 +40,16 @@ jobs:
           curl -f -X POST \
             -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
             -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
             -d @datasource.json \
-            "${{ env.GRAFANA_URL }}/api/datasources" || echo "Already exists"
+            "${{ env.GRAFANA_URL }}/api/datasources" || echo "Data source already exists or updated"
 
       - name: Push Grafana Dashboard
         run: |
           curl -f -X POST \
             -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
             -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
             -d @dashboard.json \
             "${{ env.GRAFANA_URL }}/api/dashboards/db"
 
@@ -55,5 +58,6 @@ jobs:
           curl -f -X POST \
             -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
             -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
             -d @alert.json \
             "${{ env.GRAFANA_URL }}/api/v1/provisioning/alert-rules" || echo "Alerts already provisioned"
