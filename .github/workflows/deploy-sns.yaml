@@ -20,8 +20,6 @@ jobs:
           aws-region: us-east-1
 
       - name: Deploy Grafana Infrastructure (CloudFormation)
-        # Using 'deploy' instead of 'create-stack' ensures the Lambda logic 
-        # inside the template is updated and triggered on every push.
         run: |
           aws cloudformation deploy \
             --stack-name grafana-workspace-stack \
@@ -29,27 +27,28 @@ jobs:
             --capabilities CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset
 
-      - name: Get Workspace URL
+      - name: Get Workspace URL and ID
         run: |
-          WORKSPACE_ID=$(aws cloudformation describe-stacks --stack-name grafana-workspace-stack --query "Stacks[0].Outputs[?OutputKey=='WorkspaceId'].OutputValue" --output text)
-          ENDPOINT=$(aws grafana describe-workspace --workspace-id $WORKSPACE_ID --query "workspace.endpoint" --output text)
+          # Pulling the Endpoint directly from CloudFormation Outputs
+          ENDPOINT=$(aws cloudformation describe-stacks --stack-name grafana-workspace-stack --query "Stacks[0].Outputs[?OutputKey=='WorkspaceEndpoint'].OutputValue" --output text)
           echo "GRAFANA_URL=https://$ENDPOINT" >> $GITHUB_ENV
+          
+          WORKSPACE_ID=$(aws cloudformation describe-stacks --stack-name grafana-workspace-stack --query "Stacks[0].Outputs[?OutputKey=='WorkspaceId'].OutputValue" --output text)
+          echo "WORKSPACE_ID=$WORKSPACE_ID" >> $GITHUB_ENV
 
       - name: Push Grafana Data Source
         run: |
           curl -f -X POST \
             -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -H "Accept: application/json" \
             -d @datasource.json \
-            "${{ env.GRAFANA_URL }}/api/datasources" || echo "Data source already exists or updated"
+            "${{ env.GRAFANA_URL }}/api/datasources" || echo "Data source update skipped or already exists"
 
       - name: Push Grafana Dashboard
         run: |
           curl -f -X POST \
             -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -H "Accept: application/json" \
             -d @dashboard.json \
             "${{ env.GRAFANA_URL }}/api/dashboards/db"
 
@@ -58,6 +57,5 @@ jobs:
           curl -f -X POST \
             -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -H "Accept: application/json" \
             -d @alert.json \
             "${{ env.GRAFANA_URL }}/api/v1/provisioning/alert-rules" || echo "Alerts already provisioned"
