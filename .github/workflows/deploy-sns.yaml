@@ -27,35 +27,24 @@ jobs:
             --capabilities CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset
 
-      - name: Get Workspace URL and ID
+      - name: Get Workspace URL
         run: |
-          # Pulling the Endpoint directly from CloudFormation Outputs
-          ENDPOINT=$(aws cloudformation describe-stacks --stack-name grafana-workspace-stack --query "Stacks[0].Outputs[?OutputKey=='WorkspaceEndpoint'].OutputValue" --output text)
+          # Endpoint nikal ke extra quotes aur spaces saaf karna
+          ENDPOINT=$(aws cloudformation describe-stacks --stack-name grafana-workspace-stack --query "Stacks[0].Outputs[?OutputKey=='WorkspaceEndpoint'].OutputValue" --output text | tr -d '"' | xargs)
           echo "GRAFANA_URL=https://$ENDPOINT" >> $GITHUB_ENV
-          
-          WORKSPACE_ID=$(aws cloudformation describe-stacks --stack-name grafana-workspace-stack --query "Stacks[0].Outputs[?OutputKey=='WorkspaceId'].OutputValue" --output text)
-          echo "WORKSPACE_ID=$WORKSPACE_ID" >> $GITHUB_ENV
 
       - name: Push Grafana Data Source
         run: |
           curl -f -X POST \
-            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d @datasource.json \
-            "${{ env.GRAFANA_URL }}/api/datasources" || echo "Data source update skipped or already exists"
+          -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          -d @datasource.json \
+          "${{ env.GRAFANA_URL }}/api/datasources" || echo "Data source already exists"
 
       - name: Push Grafana Dashboard
         run: |
           curl -f -X POST \
-            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d @dashboard.json \
-            "${{ env.GRAFANA_URL }}/api/dashboards/db"
-
-      - name: Push Grafana Alerts
-        run: |
-          curl -f -X POST \
-            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d @alert.json \
-            "${{ env.GRAFANA_URL }}/api/v1/provisioning/alert-rules" || echo "Alerts already provisioned"
+          -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          -d @dashboard.json \
+          "${{ env.GRAFANA_URL }}/api/dashboards/db"
