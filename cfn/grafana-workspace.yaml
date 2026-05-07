@@ -1,9 +1,8 @@
----
 AWSTemplateFormatVersion: 2010-09-09
-Description: Grafana Workspace with Lambda Plugin Installer and OTEL Dashboard
+Description: Grafana Workspace with Plugin Installer and OTEL Dashboard
 Resources:
   GrafanaServiceRole:
-    Type: AWS:IAM:Role
+    Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -13,9 +12,9 @@ Resources:
               Service: grafana.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam:aws:policy/service-role/AmazonGrafanaCloudWatchAccess
+        - arn:aws:iam::aws:policy/service-role/AmazonGrafanaCloudWatchAccess
   MyGrafanaWorkspace:
-    Type: AWS:Grafana:Workspace
+    Type: AWS::Grafana::Workspace
     Properties:
       AccountAccessType: CURRENT_ACCOUNT
       AuthenticationProviders:
@@ -26,7 +25,7 @@ Resources:
         - CLOUDWATCH
       WorkspaceRoleArn: GrafanaServiceRole.Arn
   LambdaExecutionRole:
-    Type: AWS:IAM:Role
+    Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -49,7 +48,7 @@ Resources:
                   - logs:PutLogEvents
                 Resource: "*"
   PluginInstallerFunction:
-    Type: AWS:Lambda:Function
+    Type: AWS::Lambda::Function
     Properties:
       FunctionName: grafana-plugin-installer-final
       Handler: index.handler
@@ -73,7 +72,7 @@ Resources:
               except Exception as e:
                   cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": str(e)})
   GrafanaPluginsResource:
-    Type: Custom:GrafanaPlugins
+    Type: Custom::GrafanaPlugins
     Properties:
       ServiceToken: PluginInstallerFunction.Arn
       WorkspaceId: MyGrafanaWorkspace
@@ -81,11 +80,11 @@ Resources:
         - grafana-clock-panel
         - grafana-piechart-panel
   GrafanaAlertSNSTopic:
-    Type: AWS:SNS:Topic
+    Type: AWS::SNS::Topic
     Properties:
       TopicName: grafana-alerts-topic
   CloudWatchOTELDashboard:
-    Type: AWS:CloudWatch:Dashboard
+    Type: AWS::CloudWatch::Dashboard
     Properties:
       DashboardName: OTEL-Business-Metrics
       DashboardBody: |
