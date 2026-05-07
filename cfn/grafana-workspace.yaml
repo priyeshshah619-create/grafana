@@ -57,8 +57,7 @@ Resources:
       Timeout: 300
       Code:
         ZipFile: |
-          import boto3
-          import cfnresponse
+          import boto3, cfnresponse
           def handler(event, context):
               client = boto3.client('grafana')
               try:
@@ -75,9 +74,7 @@ Resources:
     Properties:
       ServiceToken: !GetAtt PluginInstallerFunction.Arn
       WorkspaceId: !Ref MyGrafanaWorkspace
-      Plugins: 
-        - "grafana-clock-panel"
-        - "grafana-piechart-panel"
+      Plugins: ["grafana-clock-panel", "grafana-piechart-panel"]
 
   GrafanaAlertSNSTopic:
     Type: AWS::SNS::Topic
