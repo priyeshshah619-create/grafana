@@ -12,18 +12,15 @@ processors:
     send_batch_size: 1024
 
 exporters:
-  awscloudwatch:
-    log_group_name: "/aws/app/grafana-observability"
-    log_stream_name: "otel-metrics"
+  awsemf:
     region: "us-east-1"
+    log_group_name: "/aws/app/grafana-metrics"
+    log_stream_name: "otel-stream"
+    namespace: "Grafana/CustomMetrics"
 
 service:
   pipelines:
     metrics:
       receivers: [otlp]
       processors: [batch]
-      exporters: [awscloudwatch]
-    logs:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [awscloudwatch]
+      exporters: [awsemf]
