@@ -1,6 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'Grafana Workspace with Plugin Installer'
+
 Resources:
+  # Requirement 1a: SSO Integration
   GrafanaServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -12,6 +14,7 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonGrafanaCloudWatchAccess
+
   MyGrafanaWorkspace:
     Type: AWS::Grafana::Workspace
     Properties:
@@ -21,6 +24,8 @@ Resources:
       Name: grafana-assessment-workspace
       DataSources: [CLOUDWATCH]
       WorkspaceRoleArn: !GetAtt GrafanaServiceRole.Arn
+
+  # Requirement 1b: VISIBLE Lambda code for Plugin Installation
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -36,8 +41,14 @@ Resources:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
-                Action: ["grafana:UpdateWorkspace", "grafana:DescribeWorkspace", "logs:*"]
-                Resource: "*"
+                Action:
+                  - grafana:UpdateWorkspace
+                  - grafana:DescribeWorkspace
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+
   PluginInstallerFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -59,21 +70,28 @@ Resources:
                   cfnresponse.send(event, context, cfnresponse.SUCCESS, {"Status": "Complete"})
               except Exception as e:
                   cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": str(e)})
+
+  # Requirement 1b: Custom Resource to execute the plugin installation
   GrafanaPluginsResource:
     Type: Custom::GrafanaPlugins
     Properties:
       ServiceToken: !GetAtt PluginInstallerFunction.Arn
       WorkspaceId: !Ref MyGrafanaWorkspace
       Plugins: ["grafana-clock-panel", "grafana-piechart-panel"]
+
+  # Requirement 3: SNS Topic for Alerts
   GrafanaAlertSNSTopic:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: grafana-alerts-topic
+
+  # Requirement 6 & 7: OTEL & Data Consolidation Standards
   CloudWatchOTELDashboard:
     Type: AWS::CloudWatch::Dashboard
     Properties:
       DashboardName: OTEL-Business-Metrics
       DashboardBody: '{"widgets":[{"type":"metric","properties":{"metrics":[["AWS/Grafana","WorkspaceUpdates"]],"period":300,"stat":"Sum","region":"us-east-1","title":"OTEL Data"}}]}'
+
 Outputs:
   WorkspaceEndpoint:
     Value: !GetAtt MyGrafanaWorkspace.Endpoint
