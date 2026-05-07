@@ -1,6 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'Grafana Workspace with Plugin Installer'
-
 Resources:
   GrafanaServiceRole:
     Type: AWS::IAM::Role
@@ -13,7 +12,6 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonGrafanaCloudWatchAccess
-
   MyGrafanaWorkspace:
     Type: AWS::Grafana::Workspace
     Properties:
@@ -23,7 +21,6 @@ Resources:
       Name: grafana-assessment-workspace
       DataSources: [CLOUDWATCH]
       WorkspaceRoleArn: !GetAtt GrafanaServiceRole.Arn
-
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -46,7 +43,6 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: '*'
-
   PluginInstallerFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -68,25 +64,21 @@ Resources:
                   cfnresponse.send(event, context, cfnresponse.SUCCESS, {"Status": "Complete"})
               except Exception as e:
                   cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": str(e)})
-
   GrafanaPluginsResource:
     Type: Custom::GrafanaPlugins
     Properties:
       ServiceToken: !GetAtt PluginInstallerFunction.Arn
       WorkspaceId: !Ref MyGrafanaWorkspace
       Plugins: ["grafana-clock-panel", "grafana-piechart-panel"]
-
   GrafanaAlertSNSTopic:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: grafana-alerts-topic
-
   CloudWatchOTELDashboard:
     Type: AWS::CloudWatch::Dashboard
     Properties:
       DashboardName: OTEL-Business-Metrics
       DashboardBody: '{"widgets":[{"type":"metric","properties":{"metrics":[["AWS/Grafana","WorkspaceUpdates"]],"period":300,"stat":"Sum","region":"us-east-1","title":"OTEL Data"}}]}'
-
 Outputs:
   WorkspaceEndpoint:
     Value: !GetAtt MyGrafanaWorkspace.Endpoint
