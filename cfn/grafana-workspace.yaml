@@ -1,90 +1,68 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'AWS Managed Grafana - Assessment Version'
+Description: 'Grafana Workspace with Automatic Plugin Installation via Custom Resource'
 
 Resources:
-  # 1. Workspace Role
-  GrafanaServiceRole:
-    Type: 'AWS::IAM::Role'
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: grafana.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
-
-  # 2. Grafana Workspace
-  GrafanaWorkspace:
-    Type: 'AWS::Grafana::Workspace'
+  MyGrafanaWorkspace:
+    Type: AWS::Grafana::Workspace
     Properties:
       AccountAccessType: CURRENT_ACCOUNT
-      AuthenticationProviders:
-        - AWS_SSO
-      PermissionType: CUSTOMER_MANAGED
-      RoleArn: !GetAtt GrafanaServiceRole.Arn
+      AuthenticationProviders: [AWS_SSO]
+      PermissionType: SERVICE_MANAGED
       Name: grafana-assessment-workspace
+      DataSources: [CLOUDWATCH]
 
-  # 3. Lambda Role
+  # Lambda Role to allow plugin updates
   LambdaExecutionRole:
-    Type: 'AWS::IAM::Role'
+    Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+            Principal: {Service: [lambda.amazonaws.com]}
+            Action: ["sts:AssumeRole"]
       Policies:
         - PolicyName: GrafanaPluginPolicy
           PolicyDocument:
-            Version: '2012-10-17'
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
-                Action:
-                  - grafana:UpdateWorkspaceConfiguration
+                Action: 
+                  - "grafana:UpdateWorkspace"
+                  - "grafana:DescribeWorkspace"
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
                 Resource: "*"
 
-  # 4. Plugin Enabler Lambda
+  # Lambda function that installs plugins
   PluginInstallerFunction:
-    Type: 'AWS::Lambda::Function'
+    Type: AWS::Lambda::Function
     Properties:
-      Runtime: python3.9
-      Handler: index.handler
+      FunctionName: grafana-plugin-installer
+      Handler: plugin_installer.handler
       Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 60
+      Runtime: python3.9
+      Timeout: 300
       Code:
         ZipFile: |
-          import json, boto3, urllib3
-          http = urllib3.PoolManager()
-          def send(event, context, status, data):
-              body = json.dumps({'Status': status, 'Reason': 'See Logs', 'PhysicalResourceId': context.log_stream_name, 'StackId': event['StackId'], 'RequestId': event['RequestId'], 'LogicalResourceId': event['LogicalResourceId'], 'Data': data})
-              http.request('PUT', event['ResponseURL'], body=body)
+          # Initial code (CI/CD will update this)
           def handler(event, context):
-              try:
-                  if event['RequestType'] in ['Create', 'Update']:
-                      boto3.client('grafana').update_workspace_configuration(
-                          workspaceId=event['ResourceProperties']['WorkspaceId'],
-                          configuration=json.dumps({"plugins": {"pluginAdminEnabled": True}})
-                      )
-                  send(event, context, "SUCCESS", {})
-              except Exception as e:
-                  print(e); send(event, context, "FAILED", {"Message": str(e)})
+              import cfnresponse
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
 
-  # 5. Custom Resource
-  EnablePlugins:
-    Type: 'Custom::GrafanaPluginEnabler'
+  # Custom Resource to trigger the Lambda
+  GrafanaPluginsResource:
+    Type: Custom::GrafanaPlugins
     Properties:
       ServiceToken: !GetAtt PluginInstallerFunction.Arn
-      WorkspaceId: !Ref GrafanaWorkspace
+      WorkspaceId: !GetAtt MyGrafanaWorkspace.Id
+      Plugins: 
+        - "grafana-clock-panel"
+        - "grafana-piechart-panel"
 
 Outputs:
-  WorkspaceId:
-    Value: !Ref GrafanaWorkspace
   WorkspaceEndpoint:
-    Value: !GetAtt GrafanaWorkspace.Endpoint
+    Value: !GetAtt MyGrafanaWorkspace.Endpoint
+  WorkspaceId:
+    Value: !GetAtt MyGrafanaWorkspace.Id
