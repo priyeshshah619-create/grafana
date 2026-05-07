@@ -29,7 +29,7 @@ jobs:
 
       - name: Get Workspace URL
         run: |
-          # Endpoint nikal ke extra quotes aur spaces saaf karna
+          # Endpoint extract karke quotes aur spaces saaf karna
           ENDPOINT=$(aws cloudformation describe-stacks --stack-name grafana-workspace-stack --query "Stacks[0].Outputs[?OutputKey=='WorkspaceEndpoint'].OutputValue" --output text | tr -d '"' | xargs)
           echo "GRAFANA_URL=https://$ENDPOINT" >> $GITHUB_ENV
 
@@ -41,6 +41,14 @@ jobs:
           -d @datasource.json \
           "${{ env.GRAFANA_URL }}/api/datasources" || echo "Data source already exists"
 
+      - name: Push Grafana Contact Point
+        run: |
+          curl -f -X POST \
+          -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          -d @contact-point.json \
+          "${{ env.GRAFANA_URL }}/api/v1/provisioning/contact-points" || echo "Contact point already exists"
+
       - name: Push Grafana Dashboard
         run: |
           curl -f -X POST \
@@ -48,3 +56,11 @@ jobs:
           -H "Content-Type: application/json" \
           -d @dashboard.json \
           "${{ env.GRAFANA_URL }}/api/dashboards/db"
+
+      - name: Push Grafana Alerts
+        run: |
+          curl -f -X POST \
+          -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          -d @alert.json \
+          "${{ env.GRAFANA_URL }}/api/v1/provisioning/alert-rules" || echo "Alerts already provisioned"
