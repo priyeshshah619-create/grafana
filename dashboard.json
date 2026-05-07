@@ -10,7 +10,7 @@
         "type": "timeseries",
         "title": "SNS Messages Published",
         "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-        "datasource": { "type": "cloudwatch", "uid": "grafana-cloudwatch-datasource" },
+        "datasource": { "type": "cloudwatch", "name": "CloudWatch" },
         "targets": [
           {
             "namespace": "AWS/SNS",
@@ -27,7 +27,7 @@
         "type": "timeseries",
         "title": "SNS Messages Failed",
         "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-        "datasource": { "type": "cloudwatch", "uid": "grafana-cloudwatch-datasource" },
+        "datasource": { "type": "cloudwatch", "name": "CloudWatch" },
         "targets": [
           {
             "namespace": "AWS/SNS",
@@ -44,7 +44,7 @@
         "type": "gauge",
         "title": "Total SNS Success Rate",
         "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
-        "datasource": { "type": "cloudwatch", "uid": "grafana-cloudwatch-datasource" },
+        "datasource": { "type": "cloudwatch", "name": "CloudWatch" },
         "targets": [
           {
             "namespace": "AWS/SNS",
