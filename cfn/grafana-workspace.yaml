@@ -1,7 +1,22 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Grafana Workspace with Automatic Plugin Installation via Custom Resource'
+Description: 'Grafana Workspace with IAM Role and Plugin Installation via Custom Resource'
 
 Resources:
+  # 1. IAM Role for Grafana Workspace
+  GrafanaServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: grafana.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonGrafanaCloudWatchAccess
+
+  # 2. Grafana Workspace
   MyGrafanaWorkspace:
     Type: AWS::Grafana::Workspace
     Properties:
@@ -10,8 +25,9 @@ Resources:
       PermissionType: SERVICE_MANAGED
       Name: grafana-assessment-workspace
       DataSources: [CLOUDWATCH]
+      WorkspaceRoleArn: !GetAtt GrafanaServiceRole.Arn
 
-  # Lambda Role to allow plugin updates
+  # 3. IAM Role for Lambda Plugin Installer
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -35,23 +51,31 @@ Resources:
                   - "logs:PutLogEvents"
                 Resource: "*"
 
-  # Lambda function that installs plugins
+  # 4. Lambda Function (Actual Plugin Logic)
   PluginInstallerFunction:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: grafana-plugin-installer
-      Handler: plugin_installer.handler
+      Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
       Runtime: python3.9
       Timeout: 300
       Code:
         ZipFile: |
-          # Initial code (CI/CD will update this)
+          import boto3
+          import cfnresponse
           def handler(event, context):
-              import cfnresponse
-              cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+              grafana = boto3.client('grafana')
+              try:
+                  workspace_id = event['ResourceProperties']['WorkspaceId']
+                  plugins = event['ResourceProperties']['Plugins']
+                  if event['RequestType'] in ['Create', 'Update']:
+                      grafana.update_workspace(workspaceId=workspace_id, plugins=plugins)
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+              except Exception as e:
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": str(e)})
 
-  # Custom Resource to trigger the Lambda
+  # 5. Custom Resource to trigger Plugin Installation
   GrafanaPluginsResource:
     Type: Custom::GrafanaPlugins
     Properties:
