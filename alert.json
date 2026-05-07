@@ -9,23 +9,21 @@
       "rules": [
         {
           "uid": "sns-failure-alert",
-          "title": "SNS Delivery Failure",
+          "title": "SNS Delivery Failure Alert",
           "condition": "C",
           "data": [
             {
               "refId": "A",
-              "relativeTimeRange": {
-                "from": 300,
-                "to": 0
-              },
-              "datasourceUid": "grafana-cloudwatch-datasource",
+              "relativeTimeRange": { "from": 300, "to": 0 },
+              "datasourceUid": "CloudWatch",
               "model": {
                 "namespace": "AWS/SNS",
                 "metricName": "NumberOfNotificationsFailed",
                 "period": "300",
                 "refId": "A",
                 "region": "us-east-1",
-                "statistic": "Sum"
+                "statistic": "Sum",
+                "datasource": { "type": "cloudwatch", "name": "CloudWatch" }
               }
             },
             {
@@ -47,13 +45,8 @@
                 "refId": "C",
                 "conditions": [
                   {
-                    "evaluator": {
-                      "type": "gt",
-                      "params": [0]
-                    },
-                    "operator": {
-                      "type": "and"
-                    }
+                    "evaluator": { "type": "gt", "params": [0] },
+                    "operator": { "type": "and" }
                   }
                 ]
               }
