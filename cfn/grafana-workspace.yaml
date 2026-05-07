@@ -1,13 +1,11 @@
-AWSTemplateFormatVersion:'2010-09-09'
-Description: 'Grafana Workspace with IAM Role and Plugin Installation'
-
+AWSTemplateFormatVersion: 2010-09-09
+Description: Grafana Workspace with IAM Role and Plugin Installation
 Resources:
-  # 1. Grafana Service Role
   GrafanaServiceRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
           - Effect: Allow
             Principal:
@@ -15,8 +13,6 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonGrafanaCloudWatchAccess
-
-  # 2. Grafana Workspace
   MyGrafanaWorkspace:
     Type: AWS::Grafana::Workspace
     Properties:
@@ -26,13 +22,11 @@ Resources:
       Name: grafana-assessment-workspace
       DataSources: [CLOUDWATCH]
       WorkspaceRoleArn: !GetAtt GrafanaServiceRole.Arn
-
-  # 3. Lambda Role for Plugins
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
           - Effect: Allow
             Principal: {Service: [lambda.amazonaws.com]}
@@ -40,18 +34,16 @@ Resources:
       Policies:
         - PolicyName: GrafanaPluginPolicy
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Effect: Allow
-                Action: 
+                Action:
                   - "grafana:UpdateWorkspace"
                   - "grafana:DescribeWorkspace"
                   - "logs:CreateLogGroup"
                   - "logs:CreateLogStream"
                   - "logs:PutLogEvents"
                 Resource: "*"
-
-  # 4. Plugin Installer Function
   PluginInstallerFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -74,19 +66,14 @@ Resources:
                   cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
               except Exception as e:
                   cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": str(e)})
-
-  # 5. Custom Resource to Trigger Installation
   GrafanaPluginsResource:
     Type: Custom::GrafanaPlugins
     Properties:
       ServiceToken: !GetAtt PluginInstallerFunction.Arn
       WorkspaceId: !Ref MyGrafanaWorkspace
-      Plugins: 
+      Plugins:
         - "grafana-clock-panel"
         - "grafana-piechart-panel"
-
 Outputs:
   WorkspaceId:
     Value: !Ref MyGrafanaWorkspace
-  WorkspaceEndpoint:
-    Value: !GetAtt MyGrafanaWorkspace.Endpoint
