@@ -1,8 +1,0 @@
-{
-  "name": "SNS-Topic-Contact",
-  "type": "sns",
-  "settings": {
-    "topic": "arn:aws:sns:us-east-1:882352060841:Health-Alerts-Topic",
-    "authType": "workspace_iam_role"
-  }
-}
