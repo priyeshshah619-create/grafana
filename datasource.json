@@ -1,24 +1,11 @@
-[
-  {
-    "name": "CloudWatch",
-    "type": "cloudwatch",
-    "uid": "grafana-cloudwatch-datasource",
-    "access": "proxy",
-    "jsonData": {
-      "authType": "workspace_iam_role",
-      "defaultRegion": "us-east-1"
-    },
-    "editable": true
+{
+  "name": "CloudWatch",
+  "type": "cloudwatch",
+  "uid": "grafana-cloudwatch-datasource",
+  "access": "proxy",
+  "jsonData": {
+    "authType": "workspace_iam_role",
+    "defaultRegion": "us-east-1"
   },
-  {
-    "name": "MultiCloud-Prometheus",
-    "type": "prometheus",
-    "uid": "prometheus-multicloud",
-    "url": "http://prometheus-gateway.local:9090",
-    "access": "proxy",
-    "jsonData": {
-      "httpMethod": "POST"
-    },
-    "editable": true
-  }
-]
+  "editable": true
+}
