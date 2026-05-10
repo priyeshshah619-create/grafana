@@ -1,0 +1,130 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AWS Managed Grafana + Plugin Installer + CloudWatch Observability + SNS
+
+Resources:
+
+  GrafanaWorkspace:
+    Type: AWS::Grafana::Workspace
+    Properties:
+      AccountAccessType: CURRENT_ACCOUNT
+      AuthenticationProviders:
+        - AWS_SSO
+      PermissionType: SERVICE_MANAGED
+      Name: grafana-observability-workspace
+      DataSources:
+        - CLOUDWATCH
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: GrafanaPluginPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - grafana:UpdateWorkspace
+                  - grafana:DescribeWorkspace
+                Resource: "*"
+
+  PluginInstallerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: grafana-plugin-installer
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: python3.9
+      Timeout: 300
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import urllib.request
+
+          def respond(event, context, status, data):
+              body = {
+                  "Status": status,
+                  "Reason": "CloudWatch Log: " + context.log_stream_name,
+                  "PhysicalResourceId": context.log_stream_name,
+                  "StackId": event["StackId"],
+                  "RequestId": event["RequestId"],
+                  "LogicalResourceId": event["LogicalResourceId"],
+                  "Data": data
+              }
+              req = urllib.request.Request(
+                  event["ResponseURL"],
+                  data=json.dumps(body).encode(),
+                  method="PUT"
+              )
+              urllib.request.urlopen(req)
+
+          def handler(event, context):
+              try:
+                  client = boto3.client("grafana")
+                  workspace_id = event["ResourceProperties"]["WorkspaceId"]
+                  plugins = event["ResourceProperties"]["Plugins"]
+
+                  if event["RequestType"] in ["Create", "Update"]:
+                      client.update_workspace(
+                          workspaceId=workspace_id,
+                          plugins=plugins
+                      )
+
+                  respond(event, context, "SUCCESS", {"Message": "Plugins installed"})
+              except Exception as e:
+                  respond(event, context, "FAILED", {"Error": str(e)})
+
+  GrafanaPlugins:
+    Type: Custom::GrafanaPlugins
+    Properties:
+      ServiceToken: !GetAtt PluginInstallerFunction.Arn
+      WorkspaceId: !Ref GrafanaWorkspace
+      Plugins:
+        - grafana-clock-panel
+        - grafana-piechart-panel
+        - grafana-worldmap-panel
+
+  AlertSNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: grafana-alerts-topic
+
+  ObservabilityDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: Observability-OTEL-Metrics
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  ["AWS/EC2","CPUUtilization"],
+                  ["AWS/Lambda","Invocations"],
+                  ["AWS/ApiGateway","Count"]
+                ],
+                "period": 300,
+                "stat": "Average",
+                "region": "${AWS::Region}",
+                "title": "Core Workload Metrics"
+              }
+            }
+          ]
+        }
+
+Outputs:
+  GrafanaURL:
+    Value: !GetAtt GrafanaWorkspace.Endpoint
+  SNSTopicArn:
+    Value: !Ref AlertSNSTopic
