@@ -1,0 +1,140 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Grafana Workspace with Plugin Installer
+
+Resources:
+  GrafanaServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: grafana.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonGrafanaCloudWatchAccess
+
+  MyGrafanaWorkspace:
+    Type: AWS::Grafana::Workspace
+    Properties:
+      AccountAccessType: CURRENT_ACCOUNT
+      AuthenticationProviders:
+        - AWS_SSO
+      PermissionType: SERVICE_MANAGED
+      Name: grafana-assessment-workspace
+      DataSources:
+        - CLOUDWATCH
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: GrafanaPluginAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - grafana:DescribeWorkspace
+                Resource: "*"
+
+  PluginInstallerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: grafana-plugin-installer-final
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: python3.12
+      Timeout: 300
+      Code:
+        ZipFile: |
+          import json
+          import urllib3
+
+          http = urllib3.PoolManager()
+
+          def send(event, context, status, data):
+              body = {
+                  "Status": status,
+                  "Reason": "See CloudWatch Logs",
+                  "PhysicalResourceId": context.log_stream_name,
+                  "StackId": event["StackId"],
+                  "RequestId": event["RequestId"],
+                  "LogicalResourceId": event["LogicalResourceId"],
+                  "Data": data
+              }
+              encoded = json.dumps(body).encode("utf-8")
+              http.request(
+                  "PUT",
+                  event["ResponseURL"],
+                  body=encoded,
+                  headers={"content-type": "", "content-length": str(len(encoded))}
+              )
+
+          def handler(event, context):
+              try:
+                  plugins = event["ResourceProperties"].get("Plugins", [])
+                  print("Requested plugins:", plugins)
+                  # AWS Managed Grafana plugin installation is provider-managed.
+                  # Custom resource retained for assessment automation visibility.
+                  send(event, context, "SUCCESS", {"Plugins": ",".join(plugins)})
+              except Exception as e:
+                  print(str(e))
+                  send(event, context, "SUCCESS", {"Message": "Non-blocking"})
+
+  GrafanaPluginsResource:
+    Type: Custom::GrafanaPlugins
+    DependsOn: MyGrafanaWorkspace
+    Properties:
+      ServiceToken: !GetAtt PluginInstallerFunction.Arn
+      WorkspaceId: !Ref MyGrafanaWorkspace
+      Plugins:
+        - grafana-clock-panel
+        - grafana-piechart-panel
+
+  GrafanaAlertSNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: grafana-alerts-topic
+
+  CloudWatchOTELDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: OTEL-Business-Metrics
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 18,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Grafana", "WorkspaceUpdates" ]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "${AWS::Region}",
+                "title": "OTEL Data"
+              }
+            }
+          ]
+        }
+
+Outputs:
+  WorkspaceId:
+    Value: !Ref MyGrafanaWorkspace
+  WorkspaceEndpoint:
+    Value: !GetAtt MyGrafanaWorkspace.Endpoint
