@@ -11,7 +11,7 @@ Resources:
             Principal: {Service: grafana.amazonaws.com}
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AmazonGrafanaCloudWatchAccess
+        - arn:aws:iam:aws:policy/service-role/AmazonGrafanaCloudWatchAccess
   MyGrafanaWorkspace:
     Type: AWS::Grafana::Workspace
     Properties:
