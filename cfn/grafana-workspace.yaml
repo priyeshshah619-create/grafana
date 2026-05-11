@@ -1,8 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Grafana Workspace with Plugin Installer
-
+Description: 'Grafana Workspace with Plugin Installer'
 Resources:
-
   GrafanaServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -10,8 +8,7 @@ Resources:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
-            Principal:
-              Service: grafana.amazonaws.com
+            Principal: {Service: grafana.amazonaws.com}
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonGrafanaCloudWatchAccess
@@ -20,12 +17,10 @@ Resources:
     Type: AWS::Grafana::Workspace
     Properties:
       AccountAccessType: CURRENT_ACCOUNT
-      AuthenticationProviders:
-        - AWS_SSO
+      AuthenticationProviders: [AWS_SSO]
       PermissionType: SERVICE_MANAGED
       Name: grafana-assessment-workspace
-      DataSources:
-        - CLOUDWATCH
+      DataSources: [CLOUDWATCH]
       WorkspaceRoleArn: !GetAtt GrafanaServiceRole.Arn
 
   LambdaExecutionRole:
@@ -35,8 +30,7 @@ Resources:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
+            Principal: {Service: lambda.amazonaws.com}
             Action: sts:AssumeRole
       Policies:
         - PolicyName: GrafanaPluginAccess
@@ -45,11 +39,11 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - grafana:UpdateWorkspace
-                  - grafana:DescribeWorkspace
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
+                  - "grafana:UpdateWorkspace"
+                  - "grafana:DescribeWorkspace"
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
                 Resource: "*"
 
   PluginInstallerFunction:
@@ -63,19 +57,13 @@ Resources:
       Code:
         ZipFile: |
           import boto3, cfnresponse
-
           def handler(event, context):
               client = boto3.client('grafana')
               try:
                   w_id = event['ResourceProperties']['WorkspaceId']
                   plugs = event['ResourceProperties']['Plugins']
-
                   if event['RequestType'] in ['Create', 'Update']:
-                      client.update_workspace(
-                          workspaceId=w_id,
-                          plugins=plugs
-                      )
-
+                      client.update_workspace(workspaceId=w_id, plugins=plugs)
                   cfnresponse.send(event, context, cfnresponse.SUCCESS, {"Status": "Complete"})
               except Exception as e:
                   print(f"Error: {str(e)}")
@@ -86,9 +74,7 @@ Resources:
     Properties:
       ServiceToken: !GetAtt PluginInstallerFunction.Arn
       WorkspaceId: !Ref MyGrafanaWorkspace
-      Plugins:
-        - grafana-clock-panel
-        - grafana-piechart-panel
+      Plugins: ["grafana-clock-panel", "grafana-piechart-panel"]
 
   GrafanaAlertSNSTopic:
     Type: AWS::SNS::Topic
@@ -99,8 +85,7 @@ Resources:
     Type: AWS::CloudWatch::Dashboard
     Properties:
       DashboardName: OTEL-Business-Metrics
-      DashboardBody: >
-        {"widgets":[{"type":"metric","properties":{"metrics":[["AWS/Grafana","WorkspaceUpdates"]],"period":300,"stat":"Sum","region":"us-east-1","title":"OTEL Data"}}]}
+      DashboardBody: '{"widgets":[{"type":"metric","properties":{"metrics":[["AWS/Grafana","WorkspaceUpdates"]],"period":300,"stat":"Sum","region":"us-east-1","title":"OTEL Data"}}]}'
 
 Outputs:
   WorkspaceEndpoint:
