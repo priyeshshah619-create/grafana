@@ -1,6 +1,3 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Grafana Workspace with Plugin Installer'
-
 Resources:
   GrafanaServiceRole:
     Type: AWS::IAM::Role
@@ -44,10 +41,13 @@ Resources:
                 Action:
                   - grafana:UpdateWorkspace
                   - grafana:DescribeWorkspace
+                Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:/workspaces/${MyGrafanaWorkspace.Id}'
+              - Effect: Allow
+                Action:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: "*"
+                Resource: 'arn:aws:logs:*:*:*'
 
   PluginInstallerFunction:
     Type: AWS::Lambda::Function
@@ -66,32 +66,18 @@ Resources:
                   w_id = event['ResourceProperties']['WorkspaceId']
                   plugs = event['ResourceProperties']['Plugins']
                   if event['RequestType'] in ['Create', 'Update']:
-                      client.update_workspace(workspaceId=w_id, plugins=plugs)
-                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {"Status": "Complete"})
+                      client.update_workspace(workspaceId=w_id, pluginAdminEnabled=True, plugins=plugs)
+                  cfn_response.send(event, context, cfn_response.SUCCESS, {"Status": "Complete"})
               except Exception as e:
-                  print(str(e))
-                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {"Status": "FailedButContinuing"})
+                  print(f"Error: {str(e)}")
+                  cfn_response.send(event, context, cfn_response.FAILED, {"Message": str(e)})
 
   GrafanaPluginsResource:
     Type: Custom::GrafanaPlugins
+    DependsOn: MyGrafanaWorkspace
     Properties:
       ServiceToken: !GetAtt PluginInstallerFunction.Arn
       WorkspaceId: !Ref MyGrafanaWorkspace
       Plugins:
         - grafana-clock-panel
         - grafana-piechart-panel
-
-  GrafanaAlertSNSTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      TopicName: grafana-alerts-topic
-
-  CloudWatchOTELDashboard:
-    Type: AWS::CloudWatch::Dashboard
-    Properties:
-      DashboardName: OTEL-Business-Metrics
-      DashboardBody: '{"widgets":[{"type":"metric","properties":{"metrics":[["AWS/Grafana","WorkspaceUpdates"]],"period":300,"stat":"Sum","region":"us-east-1","title":"OTEL Data"}}]}'
-
-Outputs:
-  WorkspaceEndpoint:
-    Value: !GetAtt MyGrafanaWorkspace.Endpoint
