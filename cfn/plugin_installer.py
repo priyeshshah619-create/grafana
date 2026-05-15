@@ -1,6 +1,6 @@
 import boto3
 import json
-import cfnresponse
+import cfn_response
 
 def handler(event, context):
     grafana = boto3.client('grafana')
