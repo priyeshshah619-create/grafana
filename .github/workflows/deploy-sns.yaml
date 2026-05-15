@@ -1,0 +1,83 @@
+name: Deploy Grafana Workspace
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Package Lambda for CloudFormation
+        run: |
+          # Packaging the python file so CloudFormation can use it
+          cd cfn
+          zip ../plugin_installer.zip plugin_installer.py
+          cd ..
+
+      - name: Deploy Grafana Infrastructure
+        run: |
+          aws cloudformation deploy \
+            --stack-name grafana-workspace-stack \
+            --template-file cfn/grafana-workspace.yaml \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset
+
+      - name: Get Workspace URL and Token
+        run: |
+          # Fetching the endpoint from CloudFormation Outputs
+          ENDPOINT=$(aws cloudformation describe-stacks \
+            --stack-name grafana-workspace-stack \
+            --query "Stacks[0].Outputs[?OutputKey=='WorkspaceEndpoint'].OutputValue" \
+            --output text)
+
+          if [ "$ENDPOINT" == "None" ] || [ -z "$ENDPOINT" ]; then
+            echo "Error: WorkspaceEndpoint not found in Stack Outputs"
+            exit 1
+          fi
+
+          echo "GRAFANA_URL=https://$ENDPOINT" >> $GITHUB_ENV
+
+      - name: Provision Grafana Resources
+        # This step satisfies Requirements 3, 4, 6, and 7
+        run: |
+          echo "Deploying Dashboards and Alerts to ${{ env.GRAFANA_URL }}"
+
+          # 1. Push Data Source (Requirement 7)
+          curl -f -X POST \
+            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d @datasource.json \
+            "${{ env.GRAFANA_URL }}/api/datasources" || echo "Data source exists"
+
+          # 2. Push Notification Template/Contact Point (Requirement 3)
+          curl -f -X POST \
+            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d @contact-point.json \
+            "${{ env.GRAFANA_URL }}/api/v1/provisioning/contact-points" || echo "Contact point exists"
+
+          # 3. Push Dashboard (Requirement 6 - Business Metrics)
+          curl -f -X POST \
+            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d @dashboard.json \
+            "${{ env.GRAFANA_URL }}/api/dashboards/db"
+
+          # 4. Push Alerts (Requirement 3)
+          curl -f -X POST \
+            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d @alert.json \
+            "${{ env.GRAFANA_URL }}/api/v1/provisioning/alert-rules" || echo "Alerts exist"
