@@ -18,7 +18,7 @@ def handler(event, context):
             )
         
         # Always signal SUCCESS to CloudFormation on Delete to avoid hang
-        cfnresponse.send(event, context, cfn_response.SUCCESS, {"Status": "Complete"})
+        cfn_response.send(event, context, cfn_response.SUCCESS, {"Status": "Complete"})
         
     except Exception as e:
         print(f"Error: {str(e)}")
