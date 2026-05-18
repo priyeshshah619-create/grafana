@@ -1,1 +1,98 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS Managed Grafana, CloudWatch, Custom Resource Plugin Installer, and SNS Alerts'
 
+Parameters:
+  DeploymentBucket:
+    Type: String
+    Description: S3 Bucket where GitHub Actions uploads the Lambda zip file.
+  LambdaZipKey:
+    Type: String
+    Default: 'lambda/install_plugins.zip'
+
+Resources:
+  # 1. Grafana Workspace Execution Role
+  GrafanaWorkspaceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: grafana.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/aws-service-role/AWSGrafanaServiceRolePolicy
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+
+  # 2. AWS Managed Grafana Workspace (SSO Enabled)
+  GrafanaWorkspace:
+    Type: AWS::Grafana::Workspace
+    Properties:
+      Name: Engineering-Grafana
+      AccountAccessType: CURRENT_ACCOUNT
+      AuthenticationProviders:
+        - AWS_SSO
+      PermissionType: SERVICE_MANAGED
+      RoleArn: !GetAtt GrafanaWorkspaceRole.Arn
+      DataSources:
+        - CLOUDWATCH
+
+  # 3. Custom Resource Lambda Execution Role
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: GrafanaPluginAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - grafana:UpdateWorkspace
+                  - grafana:DescribeWorkspace
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+
+  # 4. Lambda Function for Custom Resource Plugin Installation
+  PluginInstallerLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: GrafanaPluginInstaller
+      Runtime: python3.11
+      Handler: install_plugins.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        S3Bucket: !Ref DeploymentBucket
+        S3Key: !Ref LambdaZipKey
+      Timeout: 300
+
+  # 5. CloudFormation Custom Resource to trigger Plugin Installation
+  GrafanaPluginsConfig:
+    Type: Custom::GrafanaPluginInstaller
+    Properties:
+      ServiceToken: !GetAtt PluginInstallerLambda.Arn
+      WorkspaceId: !GetAtt GrafanaWorkspace.Id
+      Plugins:
+        - "frser-sqlite-datasource"
+        - "grafana-clock-panel"
+
+  # 6. CloudWatch Metrics & SNS Alert Configuration
+  GrafanaAlertSNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: Grafana-Alerts-Topic
+
+Outputs:
+  GrafanaEndpoint:
+    Description: "URL to access Grafana Dashboard"
+    Value: !GetAtt GrafanaWorkspace.Endpoint
