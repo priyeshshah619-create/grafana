@@ -11,7 +11,7 @@ permissions:
 
 env:
   AWS_REGION: us-east-1
-  S3_STAGING_BUCKET: global-interview-deployment-bucket # Replace with your real S3 bucket name
+  S3_STAGING_BUCKET: cf-templates-1712fgpz3xbu9-us-east-1
 
 jobs:
   deploy_infrastructure:
