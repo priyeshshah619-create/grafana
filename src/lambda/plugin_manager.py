@@ -51,3 +51,4 @@ def handler(event, context):
         print(f"CloudFormation API responded with status: {response.status}")
     except Exception as e:
         print(f"Failed to signal CloudFormation callback: {str(e)}")
+ 
