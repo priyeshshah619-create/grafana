@@ -1,0 +1,123 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Unified AWS Observability Stack: Managed Grafana, CloudWatch, and Custom Plugins'
+
+Parameters:
+  ArtifactsBucket:
+    Type: String
+    Description: 'The S3 bucket where GitHub Actions uploads the Lambda package.'
+  LambdaSourceKey:
+    Type: String
+    Default: 'lambda/plugin_manager.zip'
+
+Resources:
+  # --- STEP 1: IAM ROLES ---
+  GrafanaWorkspaceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: grafana.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/aws-service-role/AWSGrafanaServiceRolePolicy
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CustomResourceGrafanaAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - grafana:UpdateWorkspace
+                  - grafana:DescribeWorkspace
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+
+  # --- STEP 2: AWS MANAGED GRAFANA (SSO INTEGRATION) ---
+  GrafanaWorkspace:
+    Type: AWS::Grafana::Workspace
+    Properties:
+      Name: Enterprise-Observability
+      AccountAccessType: CURRENT_ACCOUNT
+      AuthenticationProviders:
+        - AWS_SSO
+      PermissionType: SERVICE_MANAGED
+      RoleArn: !GetAtt GrafanaWorkspaceRole.Arn
+      DataSources:
+        - CLOUDWATCH
+
+  # --- STEP 3: CUSTOM RESOURCE FOR PLUGINS ---
+  PluginManagerLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: GrafanaPluginManager
+      Runtime: python3.11
+      Handler: plugin_manager.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactsBucket
+        S3Key: !Ref LambdaSourceKey
+      Timeout: 120
+
+  GrafanaPluginInstallationTrigger:
+    Type: Custom::GrafanaPluginManager
+    Properties:
+      ServiceToken: !GetAtt PluginManagerLambda.Arn
+      WorkspaceId: !GetAtt GrafanaWorkspace.Id
+      Plugins:
+        - 'amazon-cloudwatch-datasource'
+        - 'grafana-clock-panel'
+
+  # --- STEP 4: CLOUDWATCH OBSERVABILITY ---
+  CustomCloudWatchDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: Business-Critical-Metrics
+      DashboardBody: >
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/EC2", "CPUUtilization" ]
+                ],
+                "period": 300,
+                "stat": "Average",
+                "region": "us-east-1",
+                "title": "EC2 Fleet Health Indicators"
+              }
+            }
+          ]
+        }
+
+  # --- STEP 5: ALERTS & SNS NOTIFICATIONS ---
+  GrafanaAlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: Grafana-Alert-Forwarder
+
+Outputs:
+  GrafanaURL:
+    Description: 'Access endpoint for the Grafana UI console.'
+    Value: !GetAtt GrafanaWorkspace.Endpoint
