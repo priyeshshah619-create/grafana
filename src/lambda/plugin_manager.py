@@ -7,7 +7,6 @@ grafana = boto3.client('grafana')
 
 def handler(event, context):
     print("Received Event:", json.dumps(event))
-
     status = "SUCCESS"
     reason = "Plugins configured successfully"
     response_data = {}
@@ -20,23 +19,23 @@ def handler(event, context):
         if event['RequestType'] in ['Create', 'Update']:
             print(f"Configuring plugins for Workspace {workspace_id}: {plugins}")
 
-            # Update workspace description metadata to verify orchestration execution
+            # FIXED: Converted parameter keys from snake_case to correct boto3 camelCase
             grafana.update_workspace(
-                workspace_id=workspace_id,
-                description=f"Managed Grafana Workspace. Active Plugins: {', '.join(plugins)}"
+                workspaceId=workspace_id,
+                workspaceDescription=f"Managed Grafana Workspace. Active Plugins: {', '.join(plugins)}"
             )
             response_data['InstalledCount'] = len(plugins)
 
         elif event['RequestType'] == 'Delete':
             print(f"Deleting custom resources for Workspace {workspace_id}")
-            # No specific API teardown needed for metadata tags, signaling SUCCESS
+            # No explicit teardown required for metadata descriptions during lifecycle removal
 
     except Exception as e:
         print(f"Execution Error: {str(e)}")
         status = "FAILED"
         reason = str(e)
 
-    # CRITICAL: This block must run outside the try/except to handle lifecycle signals
+    # CRITICAL: This lifecycle block maps signals safely back to CloudFormation's callback URL
     response_body = json.dumps({
         'Status': status,
         'Reason': reason,
