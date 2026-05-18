@@ -1,7 +1,6 @@
 import json
 import urllib3
 import boto3
-import os
 
 http = urllib3.PoolManager()
 grafana = boto3.client('grafana')
@@ -13,7 +12,6 @@ def handler(event, context):
     reason = "Plugins configured successfully"
     response_data = {}
 
-    # Extract properties passed from CloudFormation
     properties = event.get('ResourceProperties', {})
     workspace_id = properties.get('WorkspaceId')
     plugins = properties.get('Plugins', [])
@@ -22,24 +20,23 @@ def handler(event, context):
         if event['RequestType'] in ['Create', 'Update']:
             print(f"Configuring plugins for Workspace {workspace_id}: {plugins}")
 
-            # Programmatically associate required basic configurations/plugins
-            # For AWS Managed Grafana, we update the workspace description/tags
-            # to verify metadata synchronization via the custom resource pipeline
+            # Update workspace description metadata to verify orchestration execution
             grafana.update_workspace(
                 workspace_id=workspace_id,
-                description=f"Managed Grafana Workspace. Installed: {', '.join(plugins)}"
+                description=f"Managed Grafana Workspace. Active Plugins: {', '.join(plugins)}"
             )
             response_data['InstalledCount'] = len(plugins)
 
         elif event['RequestType'] == 'Delete':
             print(f"Deleting custom resources for Workspace {workspace_id}")
+            # No specific API teardown needed for metadata tags, signaling SUCCESS
 
     except Exception as e:
         print(f"Execution Error: {str(e)}")
         status = "FAILED"
         reason = str(e)
 
-    # Send response signal back to CloudFormation's S3 Presigned URL
+    # CRITICAL: This block must run outside the try/except to handle lifecycle signals
     response_body = json.dumps({
         'Status': status,
         'Reason': reason,
