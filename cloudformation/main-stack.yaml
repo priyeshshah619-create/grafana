@@ -22,7 +22,7 @@ Resources:
               Service: grafana.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/aws-service-role/AWSGrafanaServiceRolePolicy
+        - arn:aws:iam::aws:policy/AmazonGrafanaFullAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
 
   LambdaExecutionRole:
