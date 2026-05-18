@@ -1,0 +1,34 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Bootstrap Stack: Configures GitHub Actions OIDC Provider and IAM Deployment Role'
+
+Resources:
+  # Establish trust with GitHub's token authority
+  GitHubOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        - 1c58a3a8518e8759bf075b76b750d4f2df264fcd
+
+  # The exact role your pipeline is searching for
+  GitHubActionsDeploymentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: GitHubActionsDeploymentRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOIDCProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                # Scopes permissions strictly to your repository branches
+                token.actions.githubusercontent.com:sub: repo:priyeshshah619-create/grafana:*
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
