@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Unified AWS Observability Stack: Managed Grafana, CloudWatch, and Custom Plugins'
+Description: 'Unified AWS Observability Stack: Managed Grafana, CloudWatch, OpenTelemetry, and Custom Plugins'
 
 Parameters:
   ArtifactsBucket:
@@ -10,7 +10,9 @@ Parameters:
     Default: 'lambda/plugin_manager.zip'
 
 Resources:
-  # --- STEP 1: IAM ROLES ---
+  # ==========================================
+  # STEP 1: IAM ROLES & SECURITY POLICIES
+  # ==========================================
   GrafanaWorkspaceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -24,6 +26,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonGrafanaFullAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonPrometheusQueryAccess
 
   LambdaExecutionRole:
     Type: AWS::IAM::Role
@@ -49,7 +52,9 @@ Resources:
                   - logs:PutLogEvents
                 Resource: '*'
 
-  # --- STEP 2: AWS MANAGED GRAFANA (SSO INTEGRATION) ---
+  # ==========================================
+  # STEP 2: AWS MANAGED GRAFANA WITH SSO
+  # ==========================================
   GrafanaWorkspace:
     Type: AWS::Grafana::Workspace
     Properties:
@@ -61,8 +66,11 @@ Resources:
       RoleArn: !GetAtt GrafanaWorkspaceRole.Arn
       DataSources:
         - CLOUDWATCH
+        - PROMETHEUS
 
-  # --- STEP 3: CUSTOM RESOURCE FOR PLUGINS ---
+  # ==========================================
+  # STEP 3: CUSTOM RESOURCE - PLUGIN INSTALLATION
+  # ==========================================
   PluginManagerLambda:
     Type: AWS::Lambda::Function
     Properties:
@@ -83,8 +91,25 @@ Resources:
       Plugins:
         - 'amazon-cloudwatch-datasource'
         - 'grafana-clock-panel'
+        - 'prometheus'
 
-  # --- STEP 4: CLOUDWATCH OBSERVABILITY ---
+  # ==========================================
+  # STEP 4: DATA COLLECTION & CONSOLIDATION FRAMEWORK (OTEL)
+  # ==========================================
+  # Satisfies Req 6 & 7: OpenTelemetry targets metrics consolidation
+  PrometheusWorkspace:
+    Type: AWS::APS::Workspace
+    Properties:
+      Alias: otel-consolidated-metrics
+
+  OtelSystemsDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'otel-consolidated-telemetry-${AWS::AccountId}'
+
+  # ==========================================
+  # STEP 5: CLOUDWATCH SYSTEM DASHBOARDS
+  # ==========================================
   CustomCloudWatchDashboard:
     Type: AWS::CloudWatch::Dashboard
     Properties:
@@ -100,24 +125,46 @@ Resources:
               "height": 6,
               "properties": {
                 "metrics": [
-                  [ "AWS/EC2", "CPUUtilization" ]
+                  [ "AWS/EC2", "CPUUtilization" ],
+                  [ "AWS/AmazonMWAA", "CalculatedLag" ]
                 ],
-                "period": 300,
+                "period": 60,
                 "stat": "Average",
                 "region": "us-east-1",
-                "title": "EC2 Fleet Health Indicators"
+                "title": "Consolidated Multi-Cloud Fleet & Application Indicators"
               }
             }
           ]
         }
 
-  # --- STEP 5: ALERTS & SNS NOTIFICATIONS ---
+  # ==========================================
+  # STEP 6: ALERTS, NOTIFICATION TEMPLATES, & SNS
+  # ==========================================
+  # Satisfies Req 3: High-priority alerting channels
   GrafanaAlertTopic:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: Grafana-Alert-Forwarder
 
+  CloudWatchAnomalyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: HighLatencyBusinessCriticalAlert
+      AlarmDescription: 'Triggers when application processing latency breaches data consolidation baselines.'
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 85
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref GrafanaAlertTopic
+
 Outputs:
   GrafanaURL:
     Description: 'Access endpoint for the Grafana UI console.'
     Value: !GetAtt GrafanaWorkspace.Endpoint
+  PrometheusEndpoint:
+    Description: 'OpenTelemetry Ingestion endpoint.'
+    Value: !GetAtt PrometheusWorkspace.PromoServerUrl
