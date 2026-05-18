@@ -1,0 +1,49 @@
+name: CI-CD Observability Stack Deployment
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  S3_STAGING_BUCKET: global-interview-deployment-bucket # Replace with your real S3 bucket name
+
+jobs:
+  deploy_infrastructure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::123456789012:role/GitHubActionsDeploymentRole # Replace with your IAM Role ARN
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Package Custom Resource Code
+        run: |
+          mkdir -p build
+          cd src/lambda
+          zip -r ../../build/plugin_manager.zip plugin_manager.py
+          cd ../..
+
+      - name: Stage Package to S3
+        run: |
+          aws s3 cp build/plugin_manager.zip s3://${{ env.S3_STAGING_BUCKET }}/lambda/plugin_manager.zip
+
+      - name: Deploy CloudFormation Stack
+        uses: aws-actions/aws-cloudformation-github-deploy@v1
+        with:
+          name: live-observability-core
+          template: cloudformation/main-stack.yaml
+          no-fail-on-empty-changeset: "1"
+          capabilities: CAPABILITY_NAMED_IAM
+          parameter-overrides: >-
+            ArtifactsBucket=${{ env.S3_STAGING_BUCKET }},
+            LambdaSourceKey=lambda/plugin_manager.zip
