@@ -32,3 +32,4 @@ Resources:
                 token.actions.githubusercontent.com:sub: repo:priyeshshah619-create/grafana:*
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AdministratorAccess
+ 
