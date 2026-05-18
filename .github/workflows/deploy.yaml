@@ -23,8 +23,9 @@ jobs:
       - name: Authenticate to AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::123456789012:role/GitHubActionsDeploymentRole # Replace with your IAM Role ARN
+          role-to-assume: arn:aws:iam::882352060841:role/GitHubActionsDeploymentRole
           aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
 
       - name: Package Custom Resource Code
         run: |
