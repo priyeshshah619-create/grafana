@@ -175,4 +175,4 @@ Outputs:
     Value: !GetAtt GrafanaWorkspace.Endpoint
   PrometheusEndpoint:
     Description: 'OpenTelemetry Ingestion endpoint.'
-    Value: !GetAtt PrometheusWorkspace.PromoServerUrl
+    Value: !GetAtt PrometheusWorkspace.PrometheusEndpoint
