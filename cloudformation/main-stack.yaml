@@ -23,10 +23,20 @@ Resources:
             Principal:
               Service: grafana.amazonaws.com
             Action: sts:AssumeRole
+      Policies:
+        - PolicyName: GrafanaWorkspaceServicePermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - aps:QueryMetrics
+                  - aps:GetLabels
+                  - aps:GetSeries
+                  - aps:GetMetricMetadata
+                Resource: '*'
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonGrafanaFullAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonPrometheusQueryAccess
 
   LambdaExecutionRole:
     Type: AWS::IAM::Role
@@ -96,7 +106,6 @@ Resources:
   # ==========================================
   # STEP 4: DATA COLLECTION & CONSOLIDATION FRAMEWORK (OTEL)
   # ==========================================
-  # Satisfies Req 6 & 7: OpenTelemetry targets metrics consolidation
   PrometheusWorkspace:
     Type: AWS::APS::Workspace
     Properties:
@@ -140,7 +149,6 @@ Resources:
   # ==========================================
   # STEP 6: ALERTS, NOTIFICATION TEMPLATES, & SNS
   # ==========================================
-  # Satisfies Req 3: High-priority alerting channels
   GrafanaAlertTopic:
     Type: AWS::SNS::Topic
     Properties:
