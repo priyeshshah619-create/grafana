@@ -2,13 +2,9 @@ import json
 import urllib3
 import boto3
 import os
-from botocore.auth import SigV4Auth
-from botocore.awsrequest import AWSRequest
-from botocore.credentials import Credentials
 
 http = urllib3.PoolManager()
 grafana = boto3.client('grafana')
-session = boto3.Session()
 
 def handler(event, context):
     print("Received Event:", json.dumps(event))
@@ -19,6 +15,9 @@ def handler(event, context):
     properties = event.get('ResourceProperties', {})
     workspace_id = properties.get('WorkspaceId')
     plugins = properties.get('Plugins', [])
+
+    # PASTE YOUR SERVICE ACCOUNT TOKEN FROM STEP 1 HERE
+    GRAFANA_TOKEN = glsa_PiE4w5o2MRqrVFupaZmVJ7XMPffr0ND7_1d9a7962
 
     try:
         if event['RequestType'] in ['Create', 'Update']:
@@ -38,7 +37,7 @@ def handler(event, context):
             current_dir = os.path.dirname(os.path.abspath(__file__))
             dashboard_path = os.path.join(current_dir, 'dashboard.json')
 
-            if os.path.exists(dashboard_path):
+            if os.path.exists(dashboard_path) and "glsa_" in GRAFANA_TOKEN:
                 with open(dashboard_path, 'r') as f:
                     dash_json = json.load(f)
 
@@ -55,23 +54,14 @@ def handler(event, context):
 
                 print(f"Pushing Dashboard asset directly to: {url}")
 
-                # Dynamically sign the request with standard AWS SigV4 credentials
-                creds = session.get_credentials()
-                aws_creds = Credentials(creds.access_key, creds.secret_key, creds.token)
-
-                request = AWSRequest(
-                    method='POST',
-                    url=url,
-                    data=api_payload,
-                    headers={'Content-Type': 'application/json'}
-                )
-                SigV4Auth(aws_creds, 'grafana', 'us-east-1').add_auth(request)
-
-                # Send the dashboard to the live Grafana UI
+                # Send the dashboard authenticated via the Service Account Token
                 response = http.request(
                     'POST',
                     url,
-                    headers=dict(request.headers),
+                    headers={
+                        'Content-Type': 'application/json',
+                        'Authorization': f"Bearer {GRAFANA_TOKEN}"
+                    },
                     body=api_payload
                 )
                 print(f"Grafana Dashboard API responded with code: {response.status}")
