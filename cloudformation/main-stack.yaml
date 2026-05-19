@@ -121,8 +121,8 @@ Resources:
           SNS_TOPIC_ARN: !Ref GrafanaAlertTopic
           CACHE_BUSTER: !Ref ForceUpdateID
 
-  # Requirement 1b: Custom Resource Plugin & Dashboard Configuration Trigger
-  GrafanaPluginConfigTrigger:
+  # Requirement 1b & 4: Fresh logical token identifier to clear the AWS validation hook cache
+  GrafanaAutomationSyncTrigger:
     Type: Custom::GrafanaConfiguration
     Properties:
       ServiceToken: !GetAtt GrafanaPluginManager.Arn
