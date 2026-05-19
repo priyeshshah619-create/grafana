@@ -8,6 +8,10 @@ Parameters:
   LambdaSourceKey:
     Type: String
     Default: 'lambda/plugin_manager.zip'
+  GrafanaToken:
+    Type: String
+    NoEcho: true
+    Description: 'Secure token passed from GitHub Secrets'
 
 Resources:
   # ==========================================
@@ -88,10 +92,13 @@ Resources:
       Runtime: python3.11
       Handler: plugin_manager.handler
       Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 120
       Code:
         S3Bucket: !Ref ArtifactsBucket
         S3Key: !Ref LambdaSourceKey
-      Timeout: 120
+      Environment:
+        Variables:
+          GRAFANA_TOKEN: !Ref GrafanaToken
 
   GrafanaPluginInstallationTrigger:
     Type: Custom::GrafanaPluginManager
@@ -124,27 +131,7 @@ Resources:
     Properties:
       DashboardName: Business-Critical-Metrics
       DashboardBody: >
-        {
-          "widgets": [
-            {
-              "type": "metric",
-              "x": 0,
-              "y": 0,
-              "width": 12,
-              "height": 6,
-              "properties": {
-                "metrics": [
-                  [ "AWS/EC2", "CPUUtilization" ],
-                  [ "AWS/AmazonMWAA", "CalculatedLag" ]
-                ],
-                "period": 60,
-                "stat": "Average",
-                "region": "us-east-1",
-                "title": "Consolidated Multi-Cloud Fleet & Application Indicators"
-              }
-            }
-          ]
-        }
+        {"widgets": [{"type": "metric", "x": 0, "y": 0, "width": 12, "height": 6, "properties": {"metrics": [[ "AWS/EC2", "CPUUtilization" ], [ "AWS/AmazonMWAA", "CalculatedLag" ] ], "period": 60, "stat": "Average", "region": "us-east-1", "title": "Consolidated Multi-Cloud Fleet & Application Indicators" } } ] }
 
   # ==========================================
   # STEP 6: ALERTS, NOTIFICATION TEMPLATES, & SNS
