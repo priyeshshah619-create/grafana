@@ -45,12 +45,15 @@ def handler(event, context):
                 desc = grafana.describe_workspace(workspaceId=workspace_id)
                 raw_endpoint = desc['workspace']['endpoint']
                 clean_endpoint = raw_endpoint.replace("https://", "").replace("http://", "")
-                url = f"https://{clean_endpoint}/api/dashboards/db"
 
-                # Format standard Grafana API payload object
+                # AWS Managed Grafana requires the official import endpoint
+                url = f"https://{clean_endpoint}/api/dashboards/import"
+
+                # Format standard Grafana API deployment payload wrapper
                 api_payload = json.dumps({
                     "dashboard": dash_json,
-                    "overwrite": True
+                    "overwrite": True,
+                    "inputs": []
                 })
 
                 print(f"Pushing Dashboard asset directly to clean target: {url}")
@@ -65,10 +68,10 @@ def handler(event, context):
                     },
                     body=api_payload
                 )
+
                 print(f"Grafana Dashboard API responded with code: {response.status}")
                 print(f"Response data: {response.data.decode('utf-8')}")
-
-            response_data['Status'] = "Configured"
+                response_data['Status'] = "Configured"
 
         elif event['RequestType'] == 'Delete':
             print(f"Cleaning up resources for Workspace {workspace_id}")
