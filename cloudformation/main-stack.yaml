@@ -79,7 +79,7 @@ Resources:
                   - ec2:DescribeInstances
                 Resource: "*"
 
-  # Custom Resource Lambda Backend
+  # Custom Resource Lambda Backend Execution Role
   PluginManagerExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -101,7 +101,7 @@ Resources:
                 Action:
                   - grafana:UpdateWorkspaceConfiguration
                   - grafana:DescribeWorkspace
-                Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:workspaces/${GrafanaWorkspace.Id}'
+                Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:workspaces/${GrafanaWorkspace}'
 
   GrafanaPluginManager:
     Type: AWS::Lambda::Function
@@ -126,7 +126,7 @@ Resources:
     Type: Custom::GrafanaConfiguration
     Properties:
       ServiceToken: !GetAtt GrafanaPluginManager.Arn
-      WorkspaceId: !Ref GrafanaWorkspace.Id
+      WorkspaceId: !Ref GrafanaWorkspace
       Plugins:
         - amazon-cloudwatch-datasource
         - grafana-clock-panel
