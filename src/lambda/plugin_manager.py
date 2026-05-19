@@ -16,8 +16,8 @@ def handler(event, context):
     workspace_id = properties.get('WorkspaceId')
     plugins = properties.get('Plugins', [])
 
-    # Secure Automation Token
-    GRAFANA_TOKEN = "glsa_PiE4w5o2MRqrVFupaZmVJ7XMPffr0ND7_1d9a7962"
+    # Secure Automation Token loaded from environment variables
+    GRAFANA_TOKEN = os.environ.get('GRAFANA_TOKEN', '')
 
     try:
         if event['RequestType'] in ['Create', 'Update']:
