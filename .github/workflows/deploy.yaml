@@ -31,7 +31,7 @@ jobs:
         run: |
           mkdir -p build
           cd src/lambda
-          zip -r ../../build/plugin_manager.zip plugin_manager.py
+          zip -r ../../build/plugin_manager.zip
           cd ../..
 
       - name: Stage Package to S3
