@@ -122,7 +122,7 @@ Resources:
           CACHE_BUSTER: !Ref ForceUpdateID
 
   # Requirement 1b: Custom Resource Plugin & Dashboard Configuration Trigger
-  GrafanaPluginInstallationTrigger:
+  GrafanaPluginConfigTrigger:
     Type: Custom::GrafanaConfiguration
     Properties:
       ServiceToken: !GetAtt GrafanaPluginManager.Arn
