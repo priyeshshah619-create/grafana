@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Production Enterprise Observability Stack with Managed Grafana and CloudWatch'
+Description: 'Unified AWS Observability Stack: Managed Grafana, CloudWatch, OpenTelemetry, and Custom Plugins'
 
 Parameters:
   ArtifactsBucket:
@@ -33,7 +33,7 @@ Resources:
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Sidebar: AllowGrafanaPublish
+          - Sid: AllowGrafanaPublish
             Effect: Allow
             Principal:
               Service: grafana.amazonaws.com
@@ -122,7 +122,7 @@ Resources:
           CACHE_BUSTER: !Ref ForceUpdateID
 
   # Requirement 1b & 4: Fresh logical token identifier to clear the AWS validation hook cache
-  GrafanaAutomationSyncTrigger:
+  GrafanaSyncServiceFinalTrigger:
     Type: Custom::GrafanaConfiguration
     Properties:
       ServiceToken: !GetAtt GrafanaPluginManager.Arn
