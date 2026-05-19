@@ -2,9 +2,13 @@ import json
 import urllib3
 import boto3
 import os
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
+from botocore.credentials import Credentials
 
 http = urllib3.PoolManager()
 grafana = boto3.client('grafana')
+session = boto3.Session()
 
 def handler(event, context):
     print("Received Event:", json.dumps(event))
@@ -30,7 +34,7 @@ def handler(event, context):
                 })
             )
 
-            # 2. DASHBOARD AS CODE: Read local JSON template
+            # 2. DASHBOARD AS CODE: Import directly into the UI engine
             current_dir = os.path.dirname(os.path.abspath(__file__))
             dashboard_path = os.path.join(current_dir, 'dashboard.json')
 
@@ -38,12 +42,39 @@ def handler(event, context):
                 with open(dashboard_path, 'r') as f:
                     dash_json = json.load(f)
 
-                # Fetch workspace endpoint to call the local application API
+                # Fetch workspace live HTTP endpoint
                 desc = grafana.describe_workspace(workspaceId=workspace_id)
-                endpoint = desc['workspace']['endpoint']
+                raw_endpoint = desc['workspace']['endpoint']
+                url = f"https://{raw_endpoint}/api/dashboards/db"
 
-                print(f"Successfully staged Dashboard as Code for delivery endpoint: {endpoint}")
-                # Real-world GitOps implementations route this schema via regional HTTP sidecars
+                # Format standard Grafana API payload object
+                api_payload = json.dumps({
+                    "dashboard": dash_json,
+                    "overwrite": True
+                })
+
+                print(f"Pushing Dashboard asset directly to: {url}")
+
+                # Dynamically sign the request with standard AWS SigV4 credentials
+                creds = session.get_credentials()
+                aws_creds = Credentials(creds.access_key, creds.secret_key, creds.token)
+
+                request = AWSRequest(
+                    method='POST',
+                    url=url,
+                    data=api_payload,
+                    headers={'Content-Type': 'application/json'}
+                )
+                SigV4Auth(aws_creds, 'grafana', 'us-east-1').add_auth(request)
+
+                # Send the dashboard to the live Grafana UI
+                response = http.request(
+                    'POST',
+                    url,
+                    headers=dict(request.headers),
+                    body=api_payload
+                )
+                print(f"Grafana Dashboard API responded with code: {response.status}")
 
             response_data['Status'] = "Configured"
 
