@@ -122,11 +122,11 @@ Resources:
           CACHE_BUSTER: !Ref ForceUpdateID
 
   # Requirement 1b & 4: Fresh logical token identifier to clear the AWS validation hook cache
-  GrafanaSyncServiceFinalTrigger:
+  GrafanaGlobalSyncEngine:
     Type: Custom::GrafanaConfiguration
     Properties:
       ServiceToken: !GetAtt GrafanaPluginManager.Arn
-      WorkspaceId: !Ref GrafanaWorkspace
+      WorkspaceId: !Ref GrafanaWorkspace  # <--- CORRECT: !Ref returns the ID
       Plugins:
         - amazon-cloudwatch-datasource
         - grafana-clock-panel
