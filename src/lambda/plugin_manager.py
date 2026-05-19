@@ -37,7 +37,7 @@ def handler(event, context):
             current_dir = os.path.dirname(os.path.abspath(__file__))
             dashboard_path = os.path.join(current_dir, 'dashboard.json')
 
-            if os.path.exists(dashboard_path) and "glsa_" in GRAFANA_TOKEN:
+            if os.path.exists(dashboard_path) and GRAFANA_TOKEN:
                 with open(dashboard_path, 'r') as f:
                     dash_json = json.load(f)
 
