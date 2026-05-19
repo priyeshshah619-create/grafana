@@ -163,3 +163,4 @@ Outputs:
   PrometheusEndpoint:
     Description: 'OpenTelemetry Ingestion endpoint.'
     Value: !GetAtt PrometheusWorkspace.PrometheusEndpoint
+    
