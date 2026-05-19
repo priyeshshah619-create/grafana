@@ -1,0 +1,39 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "Consolidated CloudWatch Metrics (Multi-Cloud Target)",
+      "type": "timeseries",
+      "datasource": { "type": "cloudwatch", "uid": "aws-cloudwatch" },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "aws-cloudwatch" },
+          "namespace": "AWS/EC2",
+          "metricName": "CPUUtilization",
+          "statistic": "Average",
+          "period": "300",
+          "region": "us-east-1",
+          "id": "m1"
+        }
+      ]
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["temetry", "multi-cloud"],
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Business Critical Application Metrics",
+  "version": 1
+}
