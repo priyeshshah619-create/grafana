@@ -16,8 +16,8 @@ def handler(event, context):
     workspace_id = properties.get('WorkspaceId')
     plugins = properties.get('Plugins', [])
 
-    # PASTE YOUR SERVICE ACCOUNT TOKEN FROM STEP 1 HERE
-    GRAFANA_TOKEN = glsa_PiE4w5o2MRqrVFupaZmVJ7XMPffr0ND7_1d9a7962
+    # Secure Automation Token
+    GRAFANA_TOKEN = "glsa_PiE4w5o2MRqrVFupaZmVJ7XMPffr0ND7_1d9a7962"
 
     try:
         if event['RequestType'] in ['Create', 'Update']:
@@ -41,10 +41,11 @@ def handler(event, context):
                 with open(dashboard_path, 'r') as f:
                     dash_json = json.load(f)
 
-                # Fetch workspace live HTTP endpoint
+                # Fetch workspace endpoint and clean out accidental duplicate protocols
                 desc = grafana.describe_workspace(workspaceId=workspace_id)
                 raw_endpoint = desc['workspace']['endpoint']
-                url = f"https://{raw_endpoint}/api/dashboards/db"
+                clean_endpoint = raw_endpoint.replace("https://", "").replace("http://", "")
+                url = f"https://{clean_endpoint}/api/dashboards/db"
 
                 # Format standard Grafana API payload object
                 api_payload = json.dumps({
@@ -52,7 +53,7 @@ def handler(event, context):
                     "overwrite": True
                 })
 
-                print(f"Pushing Dashboard asset directly to: {url}")
+                print(f"Pushing Dashboard asset directly to clean target: {url}")
 
                 # Send the dashboard authenticated via the Service Account Token
                 response = http.request(
@@ -65,6 +66,7 @@ def handler(event, context):
                     body=api_payload
                 )
                 print(f"Grafana Dashboard API responded with code: {response.status}")
+                print(f"Response data: {response.data.decode('utf-8')}")
 
             response_data['Status'] = "Configured"
 
