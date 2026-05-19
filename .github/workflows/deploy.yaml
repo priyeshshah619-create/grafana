@@ -48,4 +48,5 @@ jobs:
           parameter-overrides: >-
             ArtifactsBucket=${{ env.S3_STAGING_BUCKET }},
             LambdaSourceKey=lambda/plugin_manager.zip,
-            GrafanaToken=${{ secrets.GRAFANA_TOKEN }}
+            GrafanaToken=${{ secrets.GRAFANA_TOKEN }},
+            ForceUpdateID=${{ github.run_id }}
