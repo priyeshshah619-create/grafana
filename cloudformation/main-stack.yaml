@@ -1,22 +1,58 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Unified AWS Observability Stack: Managed Grafana, CloudWatch, OpenTelemetry, and Custom Plugins'
+Description: 'Production Enterprise Observability Stack with Managed Grafana and CloudWatch'
 
 Parameters:
   ArtifactsBucket:
     Type: String
-    Description: 'The S3 bucket where GitHub Actions uploads the Lambda package.'
+    Description: S3 Bucket containing Lambda zip artifacts.
   LambdaSourceKey:
     Type: String
-    Default: 'lambda/plugin_manager.zip'
+    Default: lambda/plugin_manager.zip
   GrafanaToken:
     Type: String
     NoEcho: true
-    Description: 'Secure token passed from GitHub Secrets'
+    Description: Service Account Token for Grafana Dashboard API Ingestion.
+  ForceUpdateID:
+    Type: String
+    Default: 'initial'
+    Description: GitOps cache buster ID to force code reinvocation.
 
 Resources:
-  # ==========================================
-  # STEP 1: IAM ROLES & SECURITY POLICIES
-  # ==========================================
+  # Requirement 3: SNS Alerting Infrastructure
+  GrafanaAlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: grafana-critical-alerts
+      DisplayName: "Grafana Critical System Alerts"
+
+  GrafanaAlertTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref GrafanaAlertTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sidebar: AllowGrafanaPublish
+            Effect: Allow
+            Principal:
+              Service: grafana.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref GrafanaAlertTopic
+
+  # Requirement 1: Managed Grafana Core Instance
+  GrafanaWorkspace:
+    Type: AWS::Grafana::Workspace
+    Properties:
+      Name: Enterprise-Observability
+      Description: Managed Grafana Workspace with CloudWatch Data Integration
+      AccountAccessType: CURRENT_ACCOUNT
+      AuthenticationProviders:
+        - AWS_SSO
+      PermissionType: CUSTOMER_MANAGED
+      RoleArn: !GetAtt GrafanaWorkspaceRole.Arn
+      OrganizationalUnits: []
+
   GrafanaWorkspaceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -28,21 +64,23 @@ Resources:
               Service: grafana.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: GrafanaWorkspaceServicePermissions
+        - PolicyName: GrafanaCloudWatchMetricsAccess
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action:
-                  - aps:QueryMetrics
-                  - aps:GetLabels
-                  - aps:GetSeries
-                  - aps:GetMetricMetadata
-                Resource: '*'
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+                  - cloudwatch:Describe*
+                  - cloudwatch:Get*
+                  - cloudwatch:List*
+                  - logs:Describe*
+                  - logs:Get*
+                  - ec2:DescribeTags
+                  - ec2:DescribeInstances
+                Resource: "*"
 
-  LambdaExecutionRole:
+  # Custom Resource Lambda Backend
+  PluginManagerExecutionRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -52,115 +90,51 @@ Resources:
             Principal:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: CustomResourceGrafanaAccess
+        - PolicyName: GrafanaAdminAccess
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action:
-                  - grafana:UpdateWorkspace
+                  - grafana:UpdateWorkspaceConfiguration
                   - grafana:DescribeWorkspace
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: '*'
+                Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:workspaces/${GrafanaWorkspace.Id}'
 
-  # ==========================================
-  # STEP 2: AWS MANAGED GRAFANA WITH SSO
-  # ==========================================
-  GrafanaWorkspace:
-    Type: AWS::Grafana::Workspace
-    Properties:
-      Name: Enterprise-Observability
-      AccountAccessType: CURRENT_ACCOUNT
-      AuthenticationProviders:
-        - AWS_SSO
-      PermissionType: SERVICE_MANAGED
-      RoleArn: !GetAtt GrafanaWorkspaceRole.Arn
-      DataSources:
-        - CLOUDWATCH
-        - PROMETHEUS
-
-  # ==========================================
-  # STEP 3: CUSTOM RESOURCE - PLUGIN INSTALLATION
-  # ==========================================
-  PluginManagerLambda:
+  GrafanaPluginManager:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: GrafanaPluginManager
       Runtime: python3.11
       Handler: plugin_manager.handler
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 120
+      Role: !GetAtt PluginManagerExecutionRole.Arn
+      Timeout: 300
+      MemorySize: 256
       Code:
         S3Bucket: !Ref ArtifactsBucket
         S3Key: !Ref LambdaSourceKey
       Environment:
         Variables:
           GRAFANA_TOKEN: !Ref GrafanaToken
+          SNS_TOPIC_ARN: !Ref GrafanaAlertTopic
+          CACHE_BUSTER: !Ref ForceUpdateID
 
+  # Requirement 1b: Custom Resource Plugin & Dashboard Configuration Trigger
   GrafanaPluginInstallationTrigger:
-    Type: Custom::GrafanaPluginManager
+    Type: Custom::GrafanaConfiguration
     Properties:
-      ServiceToken: !GetAtt PluginManagerLambda.Arn
-      WorkspaceId: !GetAtt GrafanaWorkspace.Id
+      ServiceToken: !GetAtt GrafanaPluginManager.Arn
+      WorkspaceId: !Ref GrafanaWorkspace.Id
       Plugins:
-        - 'amazon-cloudwatch-datasource'
-        - 'grafana-clock-panel'
-        - 'prometheus'
-
-  # ==========================================
-  # STEP 4: DATA COLLECTION & CONSOLIDATION FRAMEWORK (OTEL)
-  # ==========================================
-  PrometheusWorkspace:
-    Type: AWS::APS::Workspace
-    Properties:
-      Alias: otel-consolidated-metrics
-
-  OtelSystemsDataBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub 'otel-consolidated-telemetry-${AWS::AccountId}'
-
-  # ==========================================
-  # STEP 5: CLOUDWATCH SYSTEM DASHBOARDS
-  # ==========================================
-  CustomCloudWatchDashboard:
-    Type: AWS::CloudWatch::Dashboard
-    Properties:
-      DashboardName: Business-Critical-Metrics
-      DashboardBody: >
-        {"widgets": [{"type": "metric", "x": 0, "y": 0, "width": 12, "height": 6, "properties": {"metrics": [[ "AWS/EC2", "CPUUtilization" ], [ "AWS/AmazonMWAA", "CalculatedLag" ] ], "period": 60, "stat": "Average", "region": "us-east-1", "title": "Consolidated Multi-Cloud Fleet & Application Indicators" } } ] }
-
-  # ==========================================
-  # STEP 6: ALERTS, NOTIFICATION TEMPLATES, & SNS
-  # ==========================================
-  GrafanaAlertTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      TopicName: Grafana-Alert-Forwarder
-
-  CloudWatchAnomalyAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: HighLatencyBusinessCriticalAlert
-      AlarmDescription: 'Triggers when application processing latency breaches data consolidation baselines.'
-      MetricName: CPUUtilization
-      Namespace: AWS/EC2
-      Statistic: Average
-      Period: 60
-      EvaluationPeriods: 2
-      Threshold: 85
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      AlarmActions:
-        - !Ref GrafanaAlertTopic
+        - amazon-cloudwatch-datasource
+        - grafana-clock-panel
+        - prometheus
+      ForceUpdateID: !Ref ForceUpdateID
 
 Outputs:
-  GrafanaURL:
-    Description: 'Access endpoint for the Grafana UI console.'
+  WorkspaceUrl:
     Value: !GetAtt GrafanaWorkspace.Endpoint
-  PrometheusEndpoint:
-    Description: 'OpenTelemetry Ingestion endpoint.'
-    Value: !GetAtt PrometheusWorkspace.PrometheusEndpoint
-    
+  SNSTopicArn:
+    Value: !Ref GrafanaAlertTopic
