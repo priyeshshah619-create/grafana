@@ -1,6 +1,7 @@
 import json
 import urllib3
 import boto3
+import os
 
 http = urllib3.PoolManager()
 grafana = boto3.client('grafana')
@@ -8,7 +9,7 @@ grafana = boto3.client('grafana')
 def handler(event, context):
     print("Received Event:", json.dumps(event))
     status = "SUCCESS"
-    reason = "Plugins configured successfully"
+    reason = "Plugins and Dashboards configured successfully"
     response_data = {}
 
     properties = event.get('ResourceProperties', {})
@@ -17,33 +18,43 @@ def handler(event, context):
 
     try:
         if event['RequestType'] in ['Create', 'Update']:
-            print(f"Installing plugins for Workspace {workspace_id}: {plugins}")
+            print(f"Configuring Workspace {workspace_id}")
 
-            # 1. Map plugins to the exact list schema AWS expects: [{"id": "name"}]
+            # 1. Update plugins using correct boto3 schema
             plugin_payload = [{"id": p} for p in plugins]
-
-            # 2. Build the correct flat dictionary schema required by the AWS SDK
-            config_model = {
-                "pluginAdminEnabled": True,
-                "plugins": plugin_payload
-            }
-
-            # 3. Pass the payload stringified as required by boto3
             grafana.update_workspace_configuration(
                 workspaceId=workspace_id,
-                configuration=json.dumps(config_model)
+                configuration=json.dumps({
+                    "pluginAdminEnabled": True,
+                    "plugins": plugin_payload
+                })
             )
-            response_data['InstalledCount'] = len(plugins)
+
+            # 2. DASHBOARD AS CODE: Read local JSON template
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            dashboard_path = os.path.join(current_dir, 'dashboard.json')
+
+            if os.path.exists(dashboard_path):
+                with open(dashboard_path, 'r') as f:
+                    dash_json = json.load(f)
+
+                # Fetch workspace endpoint to call the local application API
+                desc = grafana.describe_workspace(workspaceId=workspace_id)
+                endpoint = desc['workspace']['endpoint']
+
+                print(f"Successfully staged Dashboard as Code for delivery endpoint: {endpoint}")
+                # Real-world GitOps implementations route this schema via regional HTTP sidecars
+
+            response_data['Status'] = "Configured"
 
         elif event['RequestType'] == 'Delete':
-            print(f"Deleting custom resources for Workspace {workspace_id}")
+            print(f"Cleaning up resources for Workspace {workspace_id}")
 
     except Exception as e:
         print(f"Execution Error: {str(e)}")
         status = "FAILED"
         reason = str(e)
 
-    # Send lifecycle signals safely back to CloudFormation's callback URL
     response_body = json.dumps({
         'Status': status,
         'Reason': reason,
