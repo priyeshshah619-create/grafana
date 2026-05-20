@@ -1,17 +1,6 @@
 import boto3
 import json
-import sys
-
-# Attempt to import cfnresponse, handle missing file gracefully
-try:
-    import cfnresponse
-except ImportError:
-    # If cfnresponse.py is not in the zip, we mock the signal
-    class cfnresponse:
-        SUCCESS = "SUCCESS"
-        FAILED = "FAILED"
-        def send(event, context, status, reason): pass
-    print("WARNING: cfnresponse not found in deployment package.")
+import cfnresponse 
 
 grafana = boto3.client('managedgrafana')
 
