@@ -9,9 +9,6 @@ Parameters:
   GrafanaToken:
     Type: String
     NoEcho: true
-  ForceUpdateID:
-    Type: String
-    Default: 'initial'
 
 Resources:
   GrafanaAlertTopic:
@@ -84,15 +81,4 @@ Resources:
                   - grafana:UpdateWorkspaceConfiguration
                   - grafana:UpdateWorkspace
                   - grafana:DescribeWorkspace
-                Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:workspaces/*'
-
-  GrafanaFinalProvisionerV99:
-    Type: Custom::GrafanaConfiguration
-    Properties:
-      ServiceToken: !GetAtt PluginManagerLambda.Arn
-      WorkspaceId: !Ref GrafanaWorkspace
-      Plugins:
-        - amazon-cloudwatch-datasource
-        - grafana-clock-panel
-        - prometheus
-      ForceUpdateID: !Ref ForceUpdateID
+                Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:workspaces/${GrafanaWorkspace}'
