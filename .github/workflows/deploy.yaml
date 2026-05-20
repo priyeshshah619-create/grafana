@@ -15,9 +15,7 @@ jobs:
 
       - name: Zip Lambda
         run: |
-          # Download the official CloudFormation custom resource helper
           curl https://raw.githubusercontent.com/aws-cloudformation/custom-resource-helper/master/python/cfnresponse.py -o cfnresponse.py
-          # Zip the plugin manager and the helper library together
           zip -j lambda/plugin_manager.zip lambda/plugin_manager.py cfnresponse.py
 
       - name: Upload to S3
@@ -25,10 +23,7 @@ jobs:
 
       - name: Deploy CloudFormation
         run: |
-          --stack-name live-observability-core \
-          --template-body file://cloudformation/main-stack.yaml \
-          --capabilities CAPABILITY_NAMED_IAM
-          aws cloudformation deploy \
-            --template-file cloudformation/main-stack.yaml \
+          aws cloudformation create-stack \
             --stack-name live-observability-core \
+            --template-body file://cloudformation/main-stack.yaml \
             --capabilities CAPABILITY_NAMED_IAM
