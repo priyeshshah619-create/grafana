@@ -1,52 +1,27 @@
-name: CI-CD Observability Stack Deployment
-
-on:
-  push:
-    branches:
-      - main
-
-permissions:
-  id-token: write
-  contents: read
-
-env:
-  AWS_REGION: us-east-1
-  S3_STAGING_BUCKET: cf-templates-1712fgpz3xbu9-us-east-1
-
+name: Deploy Observability Stack
+on: [push]
 jobs:
-  deploy_infrastructure:
+  deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v3
 
-      - name: Authenticate to AWS
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: arn:aws:iam::882352060841:role/GitHubActionsDeploymentRole
-          aws-region: ${{ env.AWS_REGION }}
-          audience: sts.amazonaws.com
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
-      - name: Package Custom Resource Code
+      - name: Zip Lambda
+        run: zip -j lambda/plugin_manager.zip lambda/plugin_manager.py
+
+      - name: Upload to S3
+        run: aws s3 cp lambda/plugin_manager.zip s3://cf-templates-1712fgpz3xbu9-us-east-1/lambda/plugin_manager.zip
+
+      - name: Deploy CloudFormation
         run: |
-          mkdir -p build
-          cd src/lambda
-          zip -r ../../build/plugin_manager.zip .
-          cd ../..
-
-      - name: Stage Package to S3
-        run: |
-          aws s3 cp build/plugin_manager.zip s3://${{ env.S3_STAGING_BUCKET }}/lambda/plugin_manager.zip
-
-      - name: Deploy CloudFormation Stack
-        uses: aws-actions/aws-cloudformation-github-deploy@v1
-        with:
-          name: live-observability-core
-          template: cloudformation/main-stack.yaml
-          no-fail-on-empty-changeset: "1"
-          capabilities: CAPABILITY_NAMED_IAM
-          parameter-overrides: >-
-            ArtifactsBucket=${{ env.S3_STAGING_BUCKET }},
-            LambdaSourceKey=lambda/plugin_manager.zip,
-            GrafanaToken=${{ secrets.GRAFANA_TOKEN }},
-            ForceUpdateID=${{ github.run_id }}
+          aws cloudformation deploy \
+            --template-file cloudformation/main-stack.yaml \
+            --stack-name live-observability-core \
+            --capabilities CAPABILITY_NAMED_IAM
