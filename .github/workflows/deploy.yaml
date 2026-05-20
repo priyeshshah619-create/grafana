@@ -25,6 +25,9 @@ jobs:
 
       - name: Deploy CloudFormation
         run: |
+          --stack-name live-observability-core \
+          --template-body file://cloudformation/main-stack.yaml \
+          --capabilities CAPABILITY_NAMED_IAM
           aws cloudformation deploy \
             --template-file cloudformation/main-stack.yaml \
             --stack-name live-observability-core \
