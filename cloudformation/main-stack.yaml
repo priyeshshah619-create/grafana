@@ -1,57 +1,33 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Unified AWS Observability Stack: Managed Grafana, CloudWatch, OpenTelemetry, and Custom Plugins'
+Description: 'Unified AWS Observability Stack: Managed Grafana and CloudWatch'
 
 Parameters:
   ArtifactsBucket:
     Type: String
-    Description: S3 Bucket containing Lambda zip artifacts.
   LambdaSourceKey:
     Type: String
-    Default: lambda/plugin_manager.zip
   GrafanaToken:
     Type: String
     NoEcho: true
-    Description: Service Account Token for Grafana Dashboard API Ingestion.
   ForceUpdateID:
     Type: String
     Default: 'initial'
-    Description: GitOps cache buster ID to force code reinvocation.
 
 Resources:
-  # Requirement 3: SNS Alerting Infrastructure
   GrafanaAlertTopic:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: grafana-critical-alerts
-      DisplayName: "Grafana Critical System Alerts"
 
-  GrafanaAlertTopicPolicy:
-    Type: AWS::SNS::TopicPolicy
-    Properties:
-      Topics:
-        - !Ref GrafanaAlertTopic
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Sid: AllowGrafanaPublish
-            Effect: Allow
-            Principal:
-              Service: grafana.amazonaws.com
-            Action: sns:Publish
-            Resource: !Ref GrafanaAlertTopic
-
-  # Requirement 1: Managed Grafana Core Instance
   GrafanaWorkspace:
     Type: AWS::Grafana::Workspace
     Properties:
       Name: Enterprise-Observability
-      Description: Managed Grafana Workspace with CloudWatch Data Integration
       AccountAccessType: CURRENT_ACCOUNT
       AuthenticationProviders:
         - AWS_SSO
       PermissionType: CUSTOMER_MANAGED
       RoleArn: !GetAtt GrafanaWorkspaceRole.Arn
-      OrganizationalUnits: []
 
   GrafanaWorkspaceRole:
     Type: AWS::IAM::Role
@@ -64,22 +40,28 @@ Resources:
               Service: grafana.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: GrafanaCloudWatchMetricsAccess
+        - PolicyName: GrafanaCloudWatchAccess
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
-                Action:
-                  - cloudwatch:Describe*
-                  - cloudwatch:Get*
-                  - cloudwatch:List*
-                  - logs:Describe*
-                  - logs:Get*
-                  - ec2:DescribeTags
-                  - ec2:DescribeInstances
+                Action: ["cloudwatch:Get*", "cloudwatch:List*", "logs:Describe*", "logs:Get*"]
                 Resource: "*"
 
-  # Custom Resource Lambda Backend Execution Role
+  PluginManagerLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: GrafanaPluginManager
+      Runtime: python3.11
+      Handler: plugin_manager.handler
+      Role: !GetAtt PluginManagerExecutionRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactsBucket
+        S3Key: !Ref LambdaSourceKey
+      Environment:
+        Variables:
+          GRAFANA_TOKEN: !Ref GrafanaToken
+
   PluginManagerExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -93,48 +75,22 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: GrafanaAdminAccess
+        - PolicyName: GrafanaAdmin
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
-                Action:
-                  - grafana:UpdateWorkspaceConfiguration
-                  - grafana:DescribeWorkspace
-                Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:workspaces/${GrafanaWorkspace}'
+                Action: ["grafana:UpdateWorkspaceConfiguration", "grafana:DescribeWorkspace"]
+                Resource: "*"
 
-  GrafanaPluginManager:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: GrafanaPluginManager
-      Runtime: python3.11
-      Handler: plugin_manager.handler
-      Role: !GetAtt PluginManagerExecutionRole.Arn
-      Timeout: 300
-      MemorySize: 256
-      Code:
-        S3Bucket: !Ref ArtifactsBucket
-        S3Key: !Ref LambdaSourceKey
-      Environment:
-        Variables:
-          GRAFANA_TOKEN: !Ref GrafanaToken
-          SNS_TOPIC_ARN: !Ref GrafanaAlertTopic
-          CACHE_BUSTER: !Ref ForceUpdateID
-
-  # Requirement 1b & 4: Fresh logical token identifier to clear the AWS validation hook cache
-  GrafanaGlobalSyncEngine:
+  # THIS IS THE FIX: A brand-new unique logical ID
+  GrafanaFinalProvisionerV99:
     Type: Custom::GrafanaConfiguration
     Properties:
-      ServiceToken: !GetAtt GrafanaPluginManager.Arn
-      WorkspaceId: !Ref GrafanaWorkspace  # <--- CORRECT: !Ref returns the ID
+      ServiceToken: !GetAtt PluginManagerLambda.Arn
+      WorkspaceId: !Ref GrafanaWorkspace
       Plugins:
         - amazon-cloudwatch-datasource
         - grafana-clock-panel
         - prometheus
       ForceUpdateID: !Ref ForceUpdateID
-
-Outputs:
-  WorkspaceUrl:
-    Value: !GetAtt GrafanaWorkspace.Endpoint
-  SNSTopicArn:
-    Value: !Ref GrafanaAlertTopic
