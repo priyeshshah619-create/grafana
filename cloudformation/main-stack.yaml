@@ -75,15 +75,17 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: GrafanaAdmin
+        - PolicyName: GrafanaAdminAccess
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
-                Action: ["grafana:UpdateWorkspaceConfiguration", "grafana:DescribeWorkspace"]
-                Resource: "*"
+                Action:
+                  - grafana:UpdateWorkspaceConfiguration
+                  - grafana:UpdateWorkspace
+                  - grafana:DescribeWorkspace
+                Resource: !Sub 'arn:aws:grafana:${AWS::Region}:${AWS::AccountId}:workspaces/*'
 
-  # THIS IS THE FIX: A brand-new unique logical ID
   GrafanaFinalProvisionerV99:
     Type: Custom::GrafanaConfiguration
     Properties:
