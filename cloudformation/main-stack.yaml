@@ -11,6 +11,7 @@ Resources:
 
   GrafanaPluginInstaller:
     Type: Custom::GrafanaConfiguration
+    DependsOn: PluginManagerLambda
     Properties:
       ServiceToken: !GetAtt PluginManagerLambda.Arn
       WorkspaceId: !Ref GrafanaWorkspace
