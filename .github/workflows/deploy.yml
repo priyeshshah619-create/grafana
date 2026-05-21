@@ -5,6 +5,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -12,12 +13,23 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
       
-      - name: Package and Upload Lambda
+      - name: Prepare Lambda Code
         run: |
           zip -j lambda/plugin_installer.zip lambda/plugin_installer.py
+      
+      - name: Deploy CloudFormation Stack
+        run: |
+          aws cloudformation deploy \
+            --template-file infrastructure/main.yaml \
+            --stack-name ObservabilityStack \
+            --capabilities CAPABILITY_IAM \
+            --parameter-overrides AccountId=${{ secrets.AWS_ACCOUNT_ID }}
+            
+      - name: Upload Lambda to S3
+        run: |
           aws s3 cp lambda/plugin_installer.zip s3://${{ secrets.AWS_ACCOUNT_ID }}-grafana-deployment-bucket/lambda/plugin_installer.zip
           
-      - name: Deploy CloudFormation
+      - name: Final Update
         run: |
           aws cloudformation deploy \
             --template-file infrastructure/main.yaml \
