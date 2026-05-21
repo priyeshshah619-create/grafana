@@ -1,6 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Resources:
-  # AWS Managed Grafana Workspace
+  # 1. Define the bucket here so it is created with the stack
+  DeploymentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::AccountId}-grafana-deployment-bucket"
+
+  # 2. Managed Grafana
   GrafanaWorkspace:
     Type: AWS::Grafana::Workspace
     Properties:
@@ -9,14 +15,14 @@ Resources:
       PermissionType: SERVICE_MANAGED
       WorkspaceName: ObservabilityWorkspace
 
-  # Dashboard as Code (Condition C)
+  # 3. CloudWatch Dashboard
   CloudWatchDashboard:
     Type: AWS::CloudWatch::Dashboard
     Properties:
       DashboardName: MyBusinessDashboard
       DashboardBody: !Sub '{"widgets": [{"type": "metric", "properties": {"metrics": [["AWS/Grafana", "DashboardRequests", "WorkspaceId", "${GrafanaWorkspace}"]], "view": "timeSeries", "region": "us-east-1", "title": "Grafana Requests"}}]}'
 
-  # Lambda Execution Role
+  # 4. Lambda Role
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -35,7 +41,7 @@ Resources:
                 Action: ['grafana:UpdateWorkspaceConfiguration', 'logs:CreateLogGroup', 'logs:CreateLogStream', 'logs:PutLogEvents']
                 Resource: '*'
 
-  # Custom Resource Handler (Lambda)
+  # 5. Lambda Function
   PluginLambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -48,7 +54,7 @@ Resources:
         S3Key: lambda/plugin_installer.zip
       Timeout: 300
 
-  # Trigger Plugin Installation (Condition A)
+  # 6. Trigger
   GrafanaPluginResource:
     Type: Custom::GrafanaPluginInstaller
     Properties:
@@ -59,5 +65,3 @@ Resources:
 Outputs:
   WorkspaceId:
     Value: !Ref GrafanaWorkspace
-    Export:
-      Name: WorkspaceId
