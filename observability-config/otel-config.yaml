@@ -1,0 +1,13 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+exporters:
+  awsemf:
+    log_group_name: '/aws/otel/business-metrics'
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      exporters: [awsemf]
