@@ -1,0 +1,44 @@
+Resources:
+  # The Lambda function that handles the logic
+  PluginLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: GrafanaPluginManager
+      Handler: plugin_installer.handler
+      Runtime: python3.9
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        S3Bucket: !Sub "${AWS::AccountId}-grafana-deployment-bucket"
+        S3Key: lambda/plugin_installer.zip
+      Timeout: 300
+
+  # IAM Role for the Lambda to update Grafana and log to CloudWatch
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: [lambda.amazonaws.com]}
+            Action: ['sts:AssumeRole']
+      Policies:
+        - PolicyName: GrafanaPluginPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - 'grafana:UpdateWorkspaceConfiguration'
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: '*'
+
+  # The Custom Resource that triggers the Lambda
+  GrafanaPluginResource:
+    Type: Custom::GrafanaPluginInstaller
+    Properties:
+      ServiceToken: !GetAtt PluginLambdaFunction.Arn
+      WorkspaceId: !ImportValue WorkspaceId
+      Plugins: ["grafana-piechart-panel", "grafana-worldmap-panel"]
