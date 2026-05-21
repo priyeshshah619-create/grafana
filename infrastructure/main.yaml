@@ -1,17 +1,26 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'AWS Managed Grafana Infrastructure'
-
 Resources:
+  DeploymentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::AccountId}-grafana-deployment-bucket"
+
   GrafanaWorkspace:
     Type: AWS::Grafana::Workspace
     Properties:
       AccountAccessType: CURRENT_ACCOUNT
-      AuthenticationProviders:
-        - AWS_SSO
+      AuthenticationProviders: [AWS_SSO]
       PermissionType: SERVICE_MANAGED
       WorkspaceName: ObservabilityWorkspace
 
-Outputs:
-  WorkspaceId:
-    Value: !Ref GrafanaWorkspace
-    Description: 'ID of the created Grafana Workspace'
+  CloudWatchDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: MyBusinessDashboard
+      DashboardBody: !Sub '{"widgets": [{"type": "metric", "properties": {"metrics": [["AWS/Grafana", "DashboardRequests", "WorkspaceId", "${GrafanaWorkspace}"]], "view": "timeSeries", "region": "us-east-1", "title": "Grafana Requests"}}]}'
+
+  # Import your Custom Resource logic here
+  PluginResource:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      TemplateURL: !Sub "https://${DeploymentBucket}.s3.amazonaws.com/infrastructure/custom_resource.yaml"
