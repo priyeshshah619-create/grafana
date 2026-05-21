@@ -1,5 +1,6 @@
 name: Deploy Observability Stack
 on: [push]
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -19,12 +20,16 @@ jobs:
             --template-file infrastructure/main.yaml \
             --stack-name ObservabilityStack \
             --capabilities CAPABILITY_IAM \
-            --parameter-overrides AccountId=${{ secrets.AWS_ACCOUNT_ID }}
+            --parameter-overrides AccountId=$AWS_ACCOUNT_ID
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
       - name: Package and Upload Lambda
         run: |
           zip -j lambda/plugin_installer.zip lambda/plugin_installer.py
-          aws s3 cp lambda/plugin_installer.zip s3://${{ secrets.AWS_ACCOUNT_ID }}-grafana-deployment-bucket/lambda/plugin_installer.zip
+          aws s3 cp lambda/plugin_installer.zip s3://${AWS_ACCOUNT_ID}-grafana-deployment-bucket/lambda/plugin_installer.zip
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
       - name: Final Stack Update
         run: |
@@ -32,4 +37,6 @@ jobs:
             --template-file infrastructure/main.yaml \
             --stack-name ObservabilityStack \
             --capabilities CAPABILITY_IAM \
-            --parameter-overrides AccountId=${{ secrets.AWS_ACCOUNT_ID }}
+            --parameter-overrides AccountId=$AWS_ACCOUNT_ID
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
