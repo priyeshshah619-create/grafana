@@ -15,15 +15,16 @@ jobs:
 
       - name: Zip Lambda
         run: |
-          curl https://raw.githubusercontent.com/aws-cloudformation/custom-resource-helper/master/python/cfnresponse.py -o cfnresponse.py
-          zip -j lambda/plugin_manager.zip lambda/plugin_manager.py cfnresponse.py
+          # Creates a zip file containing both required files
+          zip -j lambda/plugin_manager.zip lambda/plugin_manager.py lambda/cfnresponse.py
 
       - name: Upload to S3
-        run: aws s3 cp lambda/plugin_manager.zip s3://cf-templates-1712fgpz3xbu9-us-east-1/lambda/plugin_manager.zip
+        run: |
+          aws s3 cp lambda/plugin_manager.zip s3://cf-templates-1712fgpz3xbu9-us-east-1/lambda/plugin_manager.zip
 
       - name: Deploy CloudFormation
         run: |
-          aws cloudformation create-stack \
+          aws cloudformation deploy \
+            --template-file cloudformation/main-stack.yaml \
             --stack-name live-observability-core \
-            --template-body file://cloudformation/main-stack.yaml \
             --capabilities CAPABILITY_NAMED_IAM
