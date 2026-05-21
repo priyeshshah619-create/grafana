@@ -1,0 +1,16 @@
+{
+  "start": "-PT1H",
+  "periodOverride": "auto",
+  "widgets": [
+    {
+      "type": "metric",
+      "properties": {
+        "metrics": [ [ "AWS/Grafana", "DashboardRequests", "WorkspaceId", "YOUR_WORKSPACE_ID" ] ],
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-east-1",
+        "title": "Grafana Dashboard Request Count"
+      }
+    }
+  ]
+}
