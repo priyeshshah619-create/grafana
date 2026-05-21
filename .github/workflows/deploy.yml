@@ -33,4 +33,3 @@ jobs:
             --stack-name ObservabilityStack \
             --capabilities CAPABILITY_IAM \
             --parameter-overrides AccountId=${{ secrets.AWS_ACCOUNT_ID }}
-
