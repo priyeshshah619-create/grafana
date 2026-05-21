@@ -1,11 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Resources:
-  # Automated S3 Bucket creation
-  DeploymentBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub "${AWS::AccountId}-grafana-deployment-bucket"
-
   # AWS Managed Grafana Workspace
   GrafanaWorkspace:
     Type: AWS::Grafana::Workspace
@@ -50,7 +44,7 @@ Resources:
       Runtime: python3.9
       Role: !GetAtt LambdaExecutionRole.Arn
       Code:
-        S3Bucket: !Ref DeploymentBucket
+        S3Bucket: !Sub "${AWS::AccountId}-grafana-deployment-bucket"
         S3Key: lambda/plugin_installer.zip
       Timeout: 300
 
