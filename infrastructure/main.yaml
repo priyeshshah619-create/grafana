@@ -1,10 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Resources:
+  # Automated S3 Bucket creation
   DeploymentBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "${AWS::AccountId}-grafana-deployment-bucket"
 
+  # AWS Managed Grafana Workspace
   GrafanaWorkspace:
     Type: AWS::Grafana::Workspace
     Properties:
@@ -13,14 +15,55 @@ Resources:
       PermissionType: SERVICE_MANAGED
       WorkspaceName: ObservabilityWorkspace
 
+  # Dashboard as Code (Condition C)
   CloudWatchDashboard:
     Type: AWS::CloudWatch::Dashboard
     Properties:
       DashboardName: MyBusinessDashboard
       DashboardBody: !Sub '{"widgets": [{"type": "metric", "properties": {"metrics": [["AWS/Grafana", "DashboardRequests", "WorkspaceId", "${GrafanaWorkspace}"]], "view": "timeSeries", "region": "us-east-1", "title": "Grafana Requests"}}]}'
 
-  # Import your Custom Resource logic here
-  PluginResource:
-    Type: "AWS::CloudFormation::Stack"
+  # Lambda Execution Role
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
     Properties:
-      TemplateURL: !Sub "https://${DeploymentBucket}.s3.amazonaws.com/infrastructure/custom_resource.yaml"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: [lambda.amazonaws.com]}
+            Action: ['sts:AssumeRole']
+      Policies:
+        - PolicyName: GrafanaPluginPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ['grafana:UpdateWorkspaceConfiguration', 'logs:CreateLogGroup', 'logs:CreateLogStream', 'logs:PutLogEvents']
+                Resource: '*'
+
+  # Custom Resource Handler (Lambda)
+  PluginLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: GrafanaPluginManager
+      Handler: plugin_installer.handler
+      Runtime: python3.9
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        S3Bucket: !Ref DeploymentBucket
+        S3Key: lambda/plugin_installer.zip
+      Timeout: 300
+
+  # Trigger Plugin Installation (Condition A)
+  GrafanaPluginResource:
+    Type: Custom::GrafanaPluginInstaller
+    Properties:
+      ServiceToken: !GetAtt PluginLambdaFunction.Arn
+      WorkspaceId: !Ref GrafanaWorkspace
+      Plugins: ["grafana-piechart-panel", "grafana-worldmap-panel"]
+
+Outputs:
+  WorkspaceId:
+    Value: !Ref GrafanaWorkspace
+    Export:
+      Name: WorkspaceId
