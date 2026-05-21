@@ -13,11 +13,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
       
-      - name: Prepare Lambda Code
-        run: |
-          zip -j lambda/plugin_installer.zip lambda/plugin_installer.py
-      
-      - name: Deploy CloudFormation Stack
+      - name: Deploy Infrastructure
         run: |
           aws cloudformation deploy \
             --template-file infrastructure/main.yaml \
@@ -25,13 +21,15 @@ jobs:
             --capabilities CAPABILITY_IAM \
             --parameter-overrides AccountId=${{ secrets.AWS_ACCOUNT_ID }}
             
-      - name: Upload Lambda to S3
+      - name: Package and Upload Lambda
         run: |
+          zip -j lambda/plugin_installer.zip lambda/plugin_installer.py
           aws s3 cp lambda/plugin_installer.zip s3://${{ secrets.AWS_ACCOUNT_ID }}-grafana-deployment-bucket/lambda/plugin_installer.zip
           
-      - name: Final Update
+      - name: Final Stack Update
         run: |
           aws cloudformation deploy \
             --template-file infrastructure/main.yaml \
             --stack-name ObservabilityStack \
-            --capabilities CAPABILITY_IAM
+            --capabilities CAPABILITY_IAM \
+            --parameter-overrides AccountId=${{ secrets.AWS_ACCOUNT_ID }}
