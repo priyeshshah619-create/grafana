@@ -1,0 +1,25 @@
+name: Deploy Observability Stack
+on: [push]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      
+      - name: Package and Upload Lambda
+        run: |
+          zip -j lambda/plugin_installer.zip lambda/plugin_installer.py
+          aws s3 cp lambda/plugin_installer.zip s3://${{ secrets.AWS_ACCOUNT_ID }}-grafana-deployment-bucket/lambda/plugin_installer.zip
+          
+      - name: Deploy CloudFormation
+        run: |
+          aws cloudformation deploy \
+            --template-file infrastructure/main.yaml \
+            --stack-name ObservabilityStack \
+            --capabilities CAPABILITY_IAM
